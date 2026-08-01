@@ -2,7 +2,7 @@ import express from "express";
 import jwt from "jsonwebtoken";
 import type { Redis } from "ioredis";
 import type { PrismaClient } from "@prisma/client";
-import { getRateLimitIdentity, hashApiKey, readApiKey, readBearerToken } from "./auth.js";
+import { getRateLimitIdentity, hashApiKey, readApiKey, readBearerToken } from "./auth/auth.js";
 
 type GatewayMiddlewareDependencies = {
   prisma: PrismaClient;

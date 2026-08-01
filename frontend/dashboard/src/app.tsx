@@ -1,7 +1,7 @@
 import React from "react";
-import { createApiClient } from "./api.js";
-import { AUTH_TOKEN_STORAGE_KEY, createDefaultAuditFilters, createDefaultJobForm, createEmptyAuthForm, createJobFormFromRow, DEFAULT_PAGE_STATE } from "./dashboard-state.js";
-import { createAuditParams, createJobRequestBody, createPageParams } from "./dashboard-requests.js";
+import { createApiClient } from "./api/client.js";
+import { createAuditParams, createJobRequestBody, createPageParams } from "./api/dashboard-requests.js";
+import { AUTH_TOKEN_STORAGE_KEY, createDefaultAuditFilters, createDefaultJobForm, createEmptyAuthForm, createJobFormFromRow, DEFAULT_PAGE_STATE } from "./state/dashboard-state.js";
 import { AuthStrip, type DashboardView, Sidebar, Toolbar } from "./shell.js";
 import type { ApiKeyRow, AuditEvent, AuthResponse, AuthUser, CreatedApiKey, ExecutionRow, JobRow, MetricsOverview, NewJobFormState, PageResponse, ServiceHealthMap, WorkerRow } from "./types.js";
 import { DashboardViews } from "./views.js";

@@ -1,7 +1,7 @@
 import express from "express";
 import { PrismaClient } from "@prisma/client";
 import { ZodError } from "zod";
-import { auditQuerySchema } from "./auth.js";
+import { auditQuerySchema } from "./auth/auth.js";
 
 type AuditRouteDependencies = {
   prisma: PrismaClient;

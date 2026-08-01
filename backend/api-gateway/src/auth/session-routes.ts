@@ -2,7 +2,7 @@ import express from "express";
 import type { PrismaClient } from "@prisma/client";
 import { hashPassword, verifyPassword } from "./auth.js";
 import { hasPrismaCode, hideDevelopmentRoute, sendZodError } from "./auth-route-utils.js";
-import { loginSchema, registerSchema } from "./validation.js";
+import { loginSchema, registerSchema } from "../validation.js";
 
 type SignUserToken = (user: { id: string; email: string; role: string }) => string;
 

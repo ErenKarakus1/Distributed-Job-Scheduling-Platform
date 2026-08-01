@@ -4,7 +4,7 @@ import jwt, { type SignOptions } from "jsonwebtoken";
 import { Redis } from "ioredis";
 import { PrismaClient } from "@prisma/client";
 import { registerAuditRoutes } from "./audit-routes.js";
-import { registerAuthRoutes } from "./auth-routes.js";
+import { registerAuthRoutes } from "./auth/auth-routes.js";
 import { createForwarding } from "./forwarding.js";
 import { registerHealthRoutes } from "./health-routes.js";
 import { requestIdMiddleware, requestLogger } from "./http.js";

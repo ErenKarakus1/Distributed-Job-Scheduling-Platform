@@ -1,4 +1,4 @@
-import type { AuditFilters, JobRow, NewJobFormState, PageState } from "./types.js";
+import type { AuditFilters, JobRow, NewJobFormState, PageState } from "../types.js";
 
 export const AUTH_TOKEN_STORAGE_KEY = "scheduler.jwt";
 

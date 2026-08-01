@@ -1,7 +1,7 @@
 import express from "express";
 import axios, { AxiosError, Method } from "axios";
 import type { PrismaClient } from "@prisma/client";
-import { hashApiKey, readApiKey } from "./auth.js";
+import { hashApiKey, readApiKey } from "./auth/auth.js";
 import type { AuditInput, ServiceTarget } from "./types.js";
 
 type ForwardingDependencies = {

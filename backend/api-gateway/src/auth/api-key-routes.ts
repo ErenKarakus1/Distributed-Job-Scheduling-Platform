@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 import { hashApiKey } from "./auth.js";
 import { hasPrismaCode, hideDevelopmentRoute, sendZodError } from "./auth-route-utils.js";
-import { createApiKeySchema, parseRouteId } from "./validation.js";
+import { createApiKeySchema, parseRouteId } from "../validation.js";
 
 type ApiKeyRouteDependencies = {
   prisma: PrismaClient;

@@ -1,7 +1,7 @@
 import express from "express";
 import type { PrismaClient } from "@prisma/client";
 import { hasPrismaCode, hideDevelopmentRoute, sendZodError } from "./auth-route-utils.js";
-import { parseRouteId, updateUserRoleSchema } from "./validation.js";
+import { parseRouteId, updateUserRoleSchema } from "../validation.js";
 
 type UserRouteDependencies = {
   prisma: PrismaClient;

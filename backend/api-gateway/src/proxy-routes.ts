@@ -1,5 +1,5 @@
 import express from "express";
-import { routeParam } from "./auth.js";
+import { routeParam } from "./auth/auth.js";
 import type { AuditInput, GatewayServices, ServiceTarget } from "./types.js";
 
 type ForwardRequest = (
