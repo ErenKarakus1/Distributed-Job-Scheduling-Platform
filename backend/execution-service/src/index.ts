@@ -1,7 +1,6 @@
 import express from "express";
 import { Prisma, PrismaClient } from "@prisma/client";
-import { ZodError } from "zod";
-import { randomUUID } from "node:crypto";
+import { requestIdMiddleware, requestLogger, sendValidationError } from "./http.js";
 import { calculateStaleBefore, isExecutionStale, planStalledExecutionRecovery } from "./recovery.js";
 import { calculateBackoffDelayMs } from "./retry.js";
 import {
@@ -25,48 +24,9 @@ const recoveryBatchSize = Number(process.env.EXECUTION_RECOVERY_BATCH_SIZE ?? 50
 let recoveryRunning = false;
 let recoveryInterval: NodeJS.Timeout | undefined;
 
-function requestLogger(service: string): express.RequestHandler {
-  return (req, res, next) => {
-    const startedAt = Date.now();
-
-    res.on("finish", () => {
-      console.log(
-        JSON.stringify({
-          level: "info",
-          event: "http_request",
-          service,
-          requestId: res.locals.requestId,
-          method: req.method,
-          path: req.originalUrl,
-          statusCode: res.statusCode,
-          durationMs: Date.now() - startedAt,
-        }),
-      );
-    });
-
-    next();
-  };
-}
-
-function requestIdMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
-  const requestId = req.header("x-request-id")?.trim() || randomUUID();
-  res.locals.requestId = requestId;
-  res.setHeader("x-request-id", requestId);
-  next();
-}
-
 app.use(requestIdMiddleware);
 app.use(requestLogger("execution-service"));
 app.use(express.json());
-
-function sendValidationError(res: express.Response, error: unknown) {
-  if (error instanceof ZodError) {
-    res.status(400).json({ error: "Validation failed", issues: error.issues });
-    return true;
-  }
-
-  return false;
-}
 
 async function recoverStalledExecutions(now = new Date()) {
   const staleBefore = calculateStaleBefore(now, stalledAfterMs);
