@@ -5,8 +5,9 @@
   "description": "Distributed HTTP job scheduling platform built with Node.js, Express, TypeScript, Postgres, RabbitMQ, Prisma, React, and Docker.",
   "packageManager": "npm@10.0.0",
   "workspaces": [
-    "apps/*",
-    "packages/*"
+    "backend/*",
+    "backend/packages/*",
+    "frontend/*"
   ],
   "scripts": {
     "build": "npm run build --workspaces",
@@ -21,4 +22,3 @@
     "typescript": "^5.7.2"
   }
 }
-
