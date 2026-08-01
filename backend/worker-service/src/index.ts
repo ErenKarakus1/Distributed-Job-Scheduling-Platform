@@ -3,7 +3,7 @@ import amqp from "amqplib";
 import axios, { AxiosError } from "axios";
 import { PrismaClient } from "@prisma/client";
 import { randomUUID } from "node:crypto";
-import { z } from "zod";
+import { MalformedExecutionMessageError, normalizeHeaders, parseExecutionMessageContent, previewResponseBody } from "./message.js";
 
 const app = express();
 const port = Number(process.env.WORKER_SERVICE_PORT ?? 3004);
@@ -59,43 +59,6 @@ app.use(requestIdMiddleware);
 app.use(requestLogger("worker-service"));
 app.use(express.json());
 
-type ExecutionMessage = {
-  executionId: string;
-};
-
-const executionMessageSchema = z.object({
-  executionId: z.string().uuid(),
-});
-
-class MalformedExecutionMessageError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "MalformedExecutionMessageError";
-  }
-}
-
-function previewResponseBody(data: unknown) {
-  if (data === undefined || data === null) {
-    return undefined;
-  }
-
-  const text = typeof data === "string" ? data : JSON.stringify(data);
-  return text.slice(0, responsePreviewLimit);
-}
-
-function normalizeHeaders(headers: unknown) {
-  if (!headers || typeof headers !== "object" || Array.isArray(headers)) {
-    return undefined;
-  }
-
-  return Object.fromEntries(
-    Object.entries(headers).filter((entry): entry is [string, string | number | boolean] => {
-      const value = entry[1];
-      return typeof value === "string" || typeof value === "number" || typeof value === "boolean";
-    }),
-  );
-}
-
 function getAxiosErrorMessage(error: unknown) {
   if (axios.isAxiosError(error)) {
     return error.message;
@@ -117,24 +80,7 @@ function getAttemptStatus(error: unknown) {
 }
 
 function parseExecutionMessage(message: amqp.Message) {
-  const rawPayload = message.content.toString();
-  let payload: unknown;
-
-  try {
-    payload = JSON.parse(rawPayload);
-  } catch {
-    throw new MalformedExecutionMessageError("Execution message must be valid JSON");
-  }
-
-  try {
-    return executionMessageSchema.parse(payload) satisfies ExecutionMessage;
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      throw new MalformedExecutionMessageError("Execution message payload is invalid");
-    }
-
-    throw error;
-  }
+  return parseExecutionMessageContent(message.content.toString());
 }
 
 async function registerWorker() {
@@ -268,7 +214,7 @@ async function executeJob(executionId: string) {
       executionId,
       status: succeeded ? "SUCCEEDED" : "FAILED",
       httpStatusCode: response.status,
-      responseBodyPreview: previewResponseBody(response.data),
+      responseBodyPreview: previewResponseBody(response.data, responsePreviewLimit),
       startedAt,
       finishedAt,
     });
@@ -280,7 +226,7 @@ async function executeJob(executionId: string) {
       executionId,
       status: getAttemptStatus(error),
       httpStatusCode: axiosError.response?.status,
-      responseBodyPreview: previewResponseBody(axiosError.response?.data),
+      responseBodyPreview: previewResponseBody(axiosError.response?.data, responsePreviewLimit),
       errorMessage: getAxiosErrorMessage(error),
       startedAt,
       finishedAt,
