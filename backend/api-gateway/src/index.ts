@@ -4,15 +4,10 @@ import axios, { AxiosError, Method } from "axios";
 import jwt, { type SignOptions } from "jsonwebtoken";
 import { Redis } from "ioredis";
 import { PrismaClient } from "@prisma/client";
-import { ZodError } from "zod";
-import {
-  auditQuerySchema,
-  getRateLimitIdentity,
-  hashApiKey,
-  readApiKey,
-  readBearerToken,
-} from "./auth.js";
+import { getRateLimitIdentity, hashApiKey, readApiKey, readBearerToken } from "./auth.js";
+import { registerAuditRoutes } from "./audit-routes.js";
 import { registerAuthRoutes } from "./auth-routes.js";
+import { registerHealthRoutes } from "./health-routes.js";
 import { requestIdMiddleware, requestLogger } from "./http.js";
 import { registerProxyRoutes } from "./proxy-routes.js";
 import type { AuditInput, GatewayServices, ServiceTarget } from "./types.js";
@@ -244,64 +239,11 @@ async function forwardRequest(req: express.Request, res: express.Response, targe
   }
 }
 
-app.get("/health", (_req, res) => {
-  res.json({ service: "api-gateway", status: "ok" });
-});
-
-app.get("/health/services", async (_req, res) => {
-  const entries = await Promise.all(
-    Object.values(services).map(async (service) => {
-      try {
-        const response = await axios.get("/health", {
-          baseURL: service.baseUrl,
-          headers: { "x-request-id": String(res.locals.requestId) },
-          timeout: 2000,
-          validateStatus: () => true,
-        });
-
-        return [service.name, { statusCode: response.status, body: response.data }];
-      } catch (error) {
-        const axiosError = error as AxiosError;
-        return [service.name, { statusCode: 502, error: axiosError.message }];
-      }
-    }),
-  );
-
-  res.json(Object.fromEntries(entries));
-});
-
+registerHealthRoutes(app, { services });
 registerAuthRoutes(app, { prisma, requireJwt, signUserToken });
 
 app.use("/api", rateLimitRequests, requireApiAuth);
-
-app.get("/api/audit-events", async (req, res, next) => {
-  try {
-    const query = auditQuerySchema.parse(req.query);
-    const where = {
-      actorType: query.actorType,
-      actorId: query.actorId,
-      action: query.action,
-      resourceType: query.resourceType,
-      resourceId: query.resourceId,
-    };
-
-    const events = await prisma.auditEvent.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      take: query.limit,
-    });
-
-    res.json({ data: events });
-  } catch (error) {
-    if (error instanceof ZodError) {
-      res.status(400).json({ error: "Validation failed", issues: error.issues });
-      return;
-    }
-
-    next(error);
-  }
-});
-
+registerAuditRoutes(app, { prisma });
 registerProxyRoutes(app, { services, requireAdminUser, forwardRequest });
 
 app.use((error: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
