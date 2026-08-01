@@ -23,7 +23,16 @@ function requestLogger(service: string): express.RequestHandler {
 
     res.on("finish", () => {
       console.log(
-        `${service} requestId=${String(res.locals.requestId)} ${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - startedAt}ms`,
+        JSON.stringify({
+          level: "info",
+          event: "http_request",
+          service,
+          requestId: res.locals.requestId,
+          method: req.method,
+          path: req.originalUrl,
+          statusCode: res.statusCode,
+          durationMs: Date.now() - startedAt,
+        }),
       );
     });
 
