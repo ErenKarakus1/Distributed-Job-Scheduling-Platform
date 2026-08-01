@@ -93,6 +93,14 @@ const userRoleSchema = z.enum(["ADMIN", "VIEWER"]);
 const updateUserRoleSchema = z.object({
   role: userRoleSchema,
 });
+const auditQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  actorType: z.string().min(1).max(80).optional(),
+  actorId: z.string().min(1).max(200).optional(),
+  action: z.string().min(1).max(120).optional(),
+  resourceType: z.string().min(1).max(120).optional(),
+  resourceId: z.string().min(1).max(200).optional(),
+});
 
 type ServiceTarget = {
   name: string;
@@ -596,19 +604,32 @@ app.patch("/internal/users/:id/role", async (req, res, next) => {
 
 app.use("/api", rateLimitRequests, requireApiAuth);
 
-app.get("/api/audit-events", (req, res) => {
-  const limit = z.coerce.number().int().min(1).max(100).default(50).parse(req.query.limit);
+app.get("/api/audit-events", async (req, res, next) => {
+  try {
+    const query = auditQuerySchema.parse(req.query);
+    const where = {
+      actorType: query.actorType,
+      actorId: query.actorId,
+      action: query.action,
+      resourceType: query.resourceType,
+      resourceId: query.resourceId,
+    };
 
-  prisma.auditEvent
-    .findMany({
+    const events = await prisma.auditEvent.findMany({
+      where,
       orderBy: { createdAt: "desc" },
-      take: limit,
-    })
-    .then((events) => res.json({ data: events }))
-    .catch((error: unknown) => {
-      console.error(error);
-      res.status(500).json({ error: "Internal server error" });
+      take: query.limit,
     });
+
+    res.json({ data: events });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: "Validation failed", issues: error.issues });
+      return;
+    }
+
+    next(error);
+  }
 });
 
 app.get("/api/jobs", (req, res) => {

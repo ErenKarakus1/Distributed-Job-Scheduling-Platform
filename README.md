@@ -118,6 +118,8 @@ curl http://localhost:3000/api/audit-events ^
   -H "authorization: Bearer YOUR_JWT"
 ```
 
+Audit events can be filtered with `actorType`, `actorId`, `action`, `resourceType`, `resourceId`, and `limit`.
+
 List development API keys:
 
 ```bash
