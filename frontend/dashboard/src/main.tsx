@@ -64,6 +64,13 @@ function App() {
   const [workers, setWorkers] = React.useState<unknown[]>([]);
   const [users, setUsers] = React.useState<AuthUser[]>([]);
   const [auditEvents, setAuditEvents] = React.useState<AuditEvent[]>([]);
+  const [auditFilters, setAuditFilters] = React.useState({
+    actorType: "",
+    action: "",
+    resourceType: "",
+    resourceId: "",
+    limit: 50,
+  });
   const [metrics, setMetrics] = React.useState<Record<string, unknown>>({});
   const [health, setHealth] = React.useState<Record<string, unknown>>({});
   const [activeView, setActiveView] = React.useState<"overview" | "jobs" | "executions" | "workers" | "users" | "audit" | "health">("overview");
@@ -185,7 +192,16 @@ function App() {
 
   async function refreshAuditEvents() {
     setMessage("Loading audit events");
-    const body = await request<{ data: AuditEvent[] }>("/api/audit-events?limit=50");
+    const params = new URLSearchParams({
+      limit: String(auditFilters.limit),
+    });
+
+    if (auditFilters.actorType) params.set("actorType", auditFilters.actorType);
+    if (auditFilters.action) params.set("action", auditFilters.action);
+    if (auditFilters.resourceType) params.set("resourceType", auditFilters.resourceType);
+    if (auditFilters.resourceId) params.set("resourceId", auditFilters.resourceId);
+
+    const body = await request<{ data: AuditEvent[] }>(`/api/audit-events?${params}`);
     setAuditEvents(body.data);
     setMessage(`Loaded ${body.data.length} audit event(s)`);
   }
@@ -575,7 +591,44 @@ function App() {
 
         {activeView === "users" && <UserPanel rows={users} onRoleChange={updateUserRole} />}
 
-        {activeView === "audit" && <AuditPanel rows={auditEvents} />}
+        {activeView === "audit" && (
+          <>
+            <section className="audit-filter-bar">
+              <label>
+                Actor
+                <select value={auditFilters.actorType} onChange={(event) => setAuditFilters({ ...auditFilters, actorType: event.target.value })}>
+                  <option value="">All</option>
+                  <option value="USER">User</option>
+                  <option value="API_KEY">API key</option>
+                </select>
+              </label>
+              <label>
+                Action
+                <input value={auditFilters.action} onChange={(event) => setAuditFilters({ ...auditFilters, action: event.target.value })} />
+              </label>
+              <label>
+                Resource
+                <input value={auditFilters.resourceType} onChange={(event) => setAuditFilters({ ...auditFilters, resourceType: event.target.value })} />
+              </label>
+              <label>
+                Resource ID
+                <input value={auditFilters.resourceId} onChange={(event) => setAuditFilters({ ...auditFilters, resourceId: event.target.value })} />
+              </label>
+              <label>
+                Limit
+                <input
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={auditFilters.limit}
+                  onChange={(event) => setAuditFilters({ ...auditFilters, limit: Number(event.target.value) })}
+                />
+              </label>
+              <button onClick={() => void refreshAuditEvents()}>Apply</button>
+            </section>
+            <AuditPanel rows={auditEvents} />
+          </>
+        )}
 
         {activeView === "health" && (
           <section className="panel">
