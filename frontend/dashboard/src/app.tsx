@@ -1,5 +1,6 @@
 import React from "react";
 import { createApiClient } from "./api.js";
+import { AUTH_TOKEN_STORAGE_KEY, createDefaultAuditFilters, createDefaultJobForm, createEmptyAuthForm, DEFAULT_PAGE_STATE } from "./dashboard-state.js";
 import { parseOptionalJson } from "./json.js";
 import { AuthStrip, type DashboardView, Sidebar, Toolbar } from "./shell.js";
 import type { AuditEvent, AuthResponse, AuthUser, ExecutionRow, JobRow, MetricsOverview, NewJobFormState, PageResponse, ServiceHealthMap, WorkerRow } from "./types.js";
@@ -8,48 +9,22 @@ import { DashboardViews } from "./views.js";
 export function App() {
   const [apiBaseUrl, setApiBaseUrl] = React.useState("http://localhost:3000");
   const [apiKey, setApiKey] = React.useState("");
-  const [authToken, setAuthToken] = React.useState(() => localStorage.getItem("scheduler.jwt") ?? "");
+  const [authToken, setAuthToken] = React.useState(() => localStorage.getItem(AUTH_TOKEN_STORAGE_KEY) ?? "");
   const [authUser, setAuthUser] = React.useState<AuthUser | null>(null);
   const [authMode, setAuthMode] = React.useState<"login" | "register">("login");
-  const [authForm, setAuthForm] = React.useState({
-    email: "",
-    name: "",
-    password: "",
-  });
-  const [newJob, setNewJob] = React.useState<NewJobFormState>({
-    name: "",
-    type: "ONE_TIME",
-    method: "POST",
-    url: "",
-    headers: "{\n  \"content-type\": \"application/json\"\n}",
-    body: "{\n  \"message\": \"scheduled hello\"\n}",
-    runAt: new Date(Date.now() + 60000).toISOString().slice(0, 16),
-    cronExpression: "*/5 * * * *",
-    timezone: "UTC",
-    nextRunAt: new Date(Date.now() + 60000).toISOString().slice(0, 16),
-    maxAttempts: 3,
-    backoffType: "EXPONENTIAL",
-    retryInitialDelayMs: 1000,
-    retryMaxDelayMs: 60000,
-    timeoutMs: 30000,
-  });
+  const [authForm, setAuthForm] = React.useState(createEmptyAuthForm);
+  const [newJob, setNewJob] = React.useState<NewJobFormState>(createDefaultJobForm);
   const [jobs, setJobs] = React.useState<JobRow[]>([]);
   const [executions, setExecutions] = React.useState<ExecutionRow[]>([]);
-  const [jobPage, setJobPage] = React.useState({ limit: 25, offset: 0, total: 0 });
-  const [executionPage, setExecutionPage] = React.useState({ limit: 25, offset: 0, total: 0 });
-  const [workerPage, setWorkerPage] = React.useState({ limit: 25, offset: 0, total: 0 });
+  const [jobPage, setJobPage] = React.useState(DEFAULT_PAGE_STATE);
+  const [executionPage, setExecutionPage] = React.useState(DEFAULT_PAGE_STATE);
+  const [workerPage, setWorkerPage] = React.useState(DEFAULT_PAGE_STATE);
   const [jobStatusFilter, setJobStatusFilter] = React.useState("");
   const [executionStatusFilter, setExecutionStatusFilter] = React.useState("");
   const [workers, setWorkers] = React.useState<WorkerRow[]>([]);
   const [users, setUsers] = React.useState<AuthUser[]>([]);
   const [auditEvents, setAuditEvents] = React.useState<AuditEvent[]>([]);
-  const [auditFilters, setAuditFilters] = React.useState({
-    actorType: "",
-    action: "",
-    resourceType: "",
-    resourceId: "",
-    limit: 50,
-  });
+  const [auditFilters, setAuditFilters] = React.useState(createDefaultAuditFilters);
   const [metrics, setMetrics] = React.useState<MetricsOverview>({});
   const [health, setHealth] = React.useState<ServiceHealthMap>({});
   const [activeView, setActiveView] = React.useState<DashboardView>("overview");
@@ -62,7 +37,7 @@ export function App() {
       return;
     }
 
-    localStorage.setItem("scheduler.jwt", authToken);
+    localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, authToken);
     void loadCurrentUser(authToken);
   }, [authToken, apiBaseUrl]);
 
@@ -71,7 +46,7 @@ export function App() {
       const body = await authRequest<{ user: AuthUser }>("/auth/me", {}, token);
       setAuthUser(body.user);
     } catch {
-      localStorage.removeItem("scheduler.jwt");
+      localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
       setAuthToken("");
       setAuthUser(null);
     }
@@ -246,10 +221,10 @@ export function App() {
         "",
       );
 
-      localStorage.setItem("scheduler.jwt", body.token);
+      localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, body.token);
       setAuthToken(body.token);
       setAuthUser(body.user);
-      setAuthForm({ email: "", name: "", password: "" });
+      setAuthForm(createEmptyAuthForm());
       setMessage(`Signed in as ${body.user.email}`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Auth request failed");
@@ -257,7 +232,7 @@ export function App() {
   }
 
   function signOut() {
-    localStorage.removeItem("scheduler.jwt");
+    localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
     setAuthToken("");
     setAuthUser(null);
     setMessage("Signed out");
