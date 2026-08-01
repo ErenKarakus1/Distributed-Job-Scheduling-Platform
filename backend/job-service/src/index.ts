@@ -1,59 +1,15 @@
 import express from "express";
 import { Prisma, PrismaClient } from "@prisma/client";
-import { z } from "zod";
-import { randomUUID } from "node:crypto";
-import { createJobSchema, jobStatusSchema, paginationSchema, updateJobSchema } from "./validation.js";
+import { requestIdMiddleware, requestLogger, sendValidationError } from "./http.js";
+import { createJobSchema, jobStatusSchema, paginationSchema, parseId, updateJobSchema } from "./validation.js";
 
 const app = express();
 const port = Number(process.env.JOB_SERVICE_PORT ?? 3001);
 const prisma = new PrismaClient();
 
-function requestLogger(service: string): express.RequestHandler {
-  return (req, res, next) => {
-    const startedAt = Date.now();
-
-    res.on("finish", () => {
-      console.log(
-        JSON.stringify({
-          level: "info",
-          event: "http_request",
-          service,
-          requestId: res.locals.requestId,
-          method: req.method,
-          path: req.originalUrl,
-          statusCode: res.statusCode,
-          durationMs: Date.now() - startedAt,
-        }),
-      );
-    });
-
-    next();
-  };
-}
-
-function requestIdMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
-  const requestId = req.header("x-request-id")?.trim() || randomUUID();
-  res.locals.requestId = requestId;
-  res.setHeader("x-request-id", requestId);
-  next();
-}
-
 app.use(requestIdMiddleware);
 app.use(requestLogger("job-service"));
 app.use(express.json());
-
-function parseId(id: string) {
-  return z.string().uuid().parse(id);
-}
-
-function sendValidationError(res: express.Response, error: unknown) {
-  if (error instanceof z.ZodError) {
-    res.status(400).json({ error: "Validation failed", issues: error.issues });
-    return true;
-  }
-
-  return false;
-}
 
 app.get("/health", (_req, res) => {
   res.json({ service: "job-service", status: "ok" });

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createJobSchema, paginationSchema, updateJobSchema } from "./validation.js";
+import { createJobSchema, paginationSchema, parseId, updateJobSchema } from "./validation.js";
 
 const baseJob = {
   name: "Ping",
@@ -59,4 +59,11 @@ test("paginationSchema coerces defaults and caps page size", () => {
 
   const result = paginationSchema.safeParse({ limit: "101", offset: "0" });
   assert.equal(result.success, false);
+});
+
+test("parseId accepts UUID route params only", () => {
+  const id = "11111111-1111-4111-8111-111111111111";
+
+  assert.equal(parseId(id), id);
+  assert.throws(() => parseId("not-a-uuid"));
 });

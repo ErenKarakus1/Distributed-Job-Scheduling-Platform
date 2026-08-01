@@ -95,3 +95,7 @@ export const updateJobSchema = jobPayloadSchema
       });
     }
   });
+
+export function parseId(id: string) {
+  return z.string().uuid().parse(id);
+}
