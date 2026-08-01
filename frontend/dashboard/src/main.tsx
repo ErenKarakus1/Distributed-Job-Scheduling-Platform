@@ -1,8 +1,9 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { AuditPanel, DataPanel, FilterBar, OverviewPanel, Pager, UserPanel, WorkerPanel } from "./components.js";
+import { AuditFilterBar, JobCreateForm } from "./forms.js";
 import { parseOptionalJson } from "./json.js";
-import type { AuditEvent, AuthResponse, AuthUser } from "./types.js";
+import type { AuditEvent, AuthResponse, AuthUser, NewJobFormState } from "./types.js";
 import "./styles.css";
 
 function App() {
@@ -16,7 +17,7 @@ function App() {
     name: "",
     password: "",
   });
-  const [newJob, setNewJob] = React.useState({
+  const [newJob, setNewJob] = React.useState<NewJobFormState>({
     name: "",
     type: "ONE_TIME",
     method: "POST",
@@ -402,131 +403,7 @@ function App() {
 
         {activeView === "jobs" && (
           <>
-            <section className="panel create-panel">
-              <h2>Create Job</h2>
-              <form className="job-form" onSubmit={(event) => void createJob(event)}>
-                <label>
-                  Name
-                  <input value={newJob.name} onChange={(event) => setNewJob({ ...newJob, name: event.target.value })} required />
-                </label>
-                <label>
-                  Type
-                  <select value={newJob.type} onChange={(event) => setNewJob({ ...newJob, type: event.target.value })}>
-                    <option value="ONE_TIME">One-time</option>
-                    <option value="RECURRING">Recurring</option>
-                  </select>
-                </label>
-                <label>
-                  Method
-                  <select value={newJob.method} onChange={(event) => setNewJob({ ...newJob, method: event.target.value })}>
-                    <option>GET</option>
-                    <option>POST</option>
-                    <option>PUT</option>
-                    <option>PATCH</option>
-                    <option>DELETE</option>
-                  </select>
-                </label>
-                <label>
-                  URL
-                  <input value={newJob.url} onChange={(event) => setNewJob({ ...newJob, url: event.target.value })} required />
-                </label>
-                <label className="wide-field">
-                  Headers JSON
-                  <textarea value={newJob.headers} onChange={(event) => setNewJob({ ...newJob, headers: event.target.value })} />
-                </label>
-                <label className="wide-field">
-                  Body JSON
-                  <textarea value={newJob.body} onChange={(event) => setNewJob({ ...newJob, body: event.target.value })} />
-                </label>
-                {newJob.type === "ONE_TIME" ? (
-                  <label>
-                    Run at
-                    <input
-                      type="datetime-local"
-                      value={newJob.runAt}
-                      onChange={(event) => setNewJob({ ...newJob, runAt: event.target.value })}
-                      required
-                    />
-                  </label>
-                ) : (
-                  <>
-                    <label>
-                      Cron
-                      <input
-                        value={newJob.cronExpression}
-                        onChange={(event) => setNewJob({ ...newJob, cronExpression: event.target.value })}
-                        required
-                      />
-                    </label>
-                    <label>
-                      Timezone
-                      <input value={newJob.timezone} onChange={(event) => setNewJob({ ...newJob, timezone: event.target.value })} required />
-                    </label>
-                    <label>
-                      Next run
-                      <input
-                        type="datetime-local"
-                        value={newJob.nextRunAt}
-                        onChange={(event) => setNewJob({ ...newJob, nextRunAt: event.target.value })}
-                        required
-                      />
-                    </label>
-                  </>
-                )}
-                <label>
-                  Attempts
-                  <input
-                    type="number"
-                    min="1"
-                    max="20"
-                    value={newJob.maxAttempts}
-                    onChange={(event) => setNewJob({ ...newJob, maxAttempts: Number(event.target.value) })}
-                    required
-                  />
-                </label>
-                <label>
-                  Backoff
-                  <select value={newJob.backoffType} onChange={(event) => setNewJob({ ...newJob, backoffType: event.target.value })}>
-                    <option value="EXPONENTIAL">Exponential</option>
-                    <option value="FIXED">Fixed</option>
-                  </select>
-                </label>
-                <label>
-                  Initial delay
-                  <input
-                    type="number"
-                    min="0"
-                    max="3600000"
-                    value={newJob.retryInitialDelayMs}
-                    onChange={(event) => setNewJob({ ...newJob, retryInitialDelayMs: Number(event.target.value) })}
-                    required
-                  />
-                </label>
-                <label>
-                  Max delay
-                  <input
-                    type="number"
-                    min="0"
-                    max="86400000"
-                    value={newJob.retryMaxDelayMs}
-                    onChange={(event) => setNewJob({ ...newJob, retryMaxDelayMs: Number(event.target.value) })}
-                    required
-                  />
-                </label>
-                <label>
-                  Timeout
-                  <input
-                    type="number"
-                    min="100"
-                    max="300000"
-                    value={newJob.timeoutMs}
-                    onChange={(event) => setNewJob({ ...newJob, timeoutMs: Number(event.target.value) })}
-                    required
-                  />
-                </label>
-                <button type="submit">Create</button>
-              </form>
-            </section>
+            <JobCreateForm job={newJob} onChange={setNewJob} onSubmit={(event) => void createJob(event)} />
             <FilterBar
               label="Job status"
               value={jobStatusFilter}
@@ -572,39 +449,7 @@ function App() {
 
         {activeView === "audit" && (
           <>
-            <section className="audit-filter-bar">
-              <label>
-                Actor
-                <select value={auditFilters.actorType} onChange={(event) => setAuditFilters({ ...auditFilters, actorType: event.target.value })}>
-                  <option value="">All</option>
-                  <option value="USER">User</option>
-                  <option value="API_KEY">API key</option>
-                </select>
-              </label>
-              <label>
-                Action
-                <input value={auditFilters.action} onChange={(event) => setAuditFilters({ ...auditFilters, action: event.target.value })} />
-              </label>
-              <label>
-                Resource
-                <input value={auditFilters.resourceType} onChange={(event) => setAuditFilters({ ...auditFilters, resourceType: event.target.value })} />
-              </label>
-              <label>
-                Resource ID
-                <input value={auditFilters.resourceId} onChange={(event) => setAuditFilters({ ...auditFilters, resourceId: event.target.value })} />
-              </label>
-              <label>
-                Limit
-                <input
-                  type="number"
-                  min="1"
-                  max="100"
-                  value={auditFilters.limit}
-                  onChange={(event) => setAuditFilters({ ...auditFilters, limit: Number(event.target.value) })}
-                />
-              </label>
-              <button onClick={() => void refreshAuditEvents()}>Apply</button>
-            </section>
+            <AuditFilterBar filters={auditFilters} onChange={setAuditFilters} onApply={() => void refreshAuditEvents()} />
             <AuditPanel rows={auditEvents} />
           </>
         )}

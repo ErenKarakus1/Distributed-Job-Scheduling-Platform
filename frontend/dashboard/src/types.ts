@@ -27,3 +27,29 @@ export type PageState = {
   offset: number;
   total: number;
 };
+
+export type NewJobFormState = {
+  name: string;
+  type: string;
+  method: string;
+  url: string;
+  headers: string;
+  body: string;
+  runAt: string;
+  cronExpression: string;
+  timezone: string;
+  nextRunAt: string;
+  maxAttempts: number;
+  backoffType: string;
+  retryInitialDelayMs: number;
+  retryMaxDelayMs: number;
+  timeoutMs: number;
+};
+
+export type AuditFilters = {
+  actorType: string;
+  action: string;
+  resourceType: string;
+  resourceId: string;
+  limit: number;
+};
