@@ -11,6 +11,7 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces",
+    "bootstrap:admin": "npm run bootstrap:admin -w @scheduler/api-gateway",
     "db:generate": "npm run db:generate -w @scheduler/database",
     "db:migrate": "npm run db:migrate -w @scheduler/database",
     "dev": "npm run dev --workspaces --if-present",
