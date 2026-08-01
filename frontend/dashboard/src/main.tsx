@@ -5,15 +5,26 @@ import "./styles.css";
 function App() {
   const [apiBaseUrl, setApiBaseUrl] = React.useState("http://localhost:3000");
   const [apiKey, setApiKey] = React.useState("");
+  const [newJob, setNewJob] = React.useState({
+    name: "",
+    method: "POST",
+    url: "",
+    runAt: new Date(Date.now() + 60000).toISOString().slice(0, 16),
+  });
   const [jobs, setJobs] = React.useState<unknown[]>([]);
   const [executions, setExecutions] = React.useState<unknown[]>([]);
   const [health, setHealth] = React.useState<Record<string, unknown>>({});
   const [activeView, setActiveView] = React.useState<"jobs" | "executions" | "health">("jobs");
   const [message, setMessage] = React.useState("Ready");
 
-  async function request<T>(path: string) {
+  async function request<T>(path: string, options: RequestInit = {}) {
     const response = await fetch(`${apiBaseUrl}${path}`, {
-      headers: apiKey ? { "x-api-key": apiKey } : {},
+      ...options,
+      headers: {
+        ...(apiKey ? { "x-api-key": apiKey } : {}),
+        ...(options.body ? { "content-type": "application/json" } : {}),
+        ...options.headers,
+      },
     });
 
     const body = (await response.json()) as T;
@@ -56,6 +67,38 @@ function App() {
     }
   }
 
+  async function createOneTimeJob(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    try {
+      setMessage("Creating job");
+      await request("/api/jobs", {
+        method: "POST",
+        body: JSON.stringify({
+          name: newJob.name,
+          type: "ONE_TIME",
+          method: newJob.method,
+          url: newJob.url,
+          runAt: new Date(newJob.runAt).toISOString(),
+        }),
+      });
+      setNewJob((current) => ({ ...current, name: "", url: "" }));
+      await refreshJobs();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Create job failed");
+    }
+  }
+
+  async function runJobAction(jobId: string, action: "run" | "pause" | "resume") {
+    try {
+      setMessage(`${action} job`);
+      await request(`/api/jobs/${jobId}/${action}`, { method: "POST" });
+      await refreshJobs();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : `${action} failed`);
+    }
+  }
+
   return (
     <main className="app-shell">
       <aside className="sidebar">
@@ -93,7 +136,42 @@ function App() {
         <div className="status-line">{message}</div>
 
         {activeView === "jobs" && (
-          <DataPanel title="Jobs" rows={jobs} emptyText="No jobs loaded" />
+          <>
+            <section className="panel create-panel">
+              <h2>Create One-Time Job</h2>
+              <form className="job-form" onSubmit={(event) => void createOneTimeJob(event)}>
+                <label>
+                  Name
+                  <input value={newJob.name} onChange={(event) => setNewJob({ ...newJob, name: event.target.value })} required />
+                </label>
+                <label>
+                  Method
+                  <select value={newJob.method} onChange={(event) => setNewJob({ ...newJob, method: event.target.value })}>
+                    <option>GET</option>
+                    <option>POST</option>
+                    <option>PUT</option>
+                    <option>PATCH</option>
+                    <option>DELETE</option>
+                  </select>
+                </label>
+                <label>
+                  URL
+                  <input value={newJob.url} onChange={(event) => setNewJob({ ...newJob, url: event.target.value })} required />
+                </label>
+                <label>
+                  Run at
+                  <input
+                    type="datetime-local"
+                    value={newJob.runAt}
+                    onChange={(event) => setNewJob({ ...newJob, runAt: event.target.value })}
+                    required
+                  />
+                </label>
+                <button type="submit">Create</button>
+              </form>
+            </section>
+            <DataPanel title="Jobs" rows={jobs} emptyText="No jobs loaded" onJobAction={runJobAction} />
+          </>
         )}
 
         {activeView === "executions" && (
@@ -111,7 +189,12 @@ function App() {
   );
 }
 
-function DataPanel(props: { title: string; rows: unknown[]; emptyText: string }) {
+function DataPanel(props: {
+  title: string;
+  rows: unknown[];
+  emptyText: string;
+  onJobAction?: (jobId: string, action: "run" | "pause" | "resume") => void;
+}) {
   return (
     <section className="panel">
       <h2>{props.title}</h2>
@@ -126,6 +209,7 @@ function DataPanel(props: { title: string; rows: unknown[]; emptyText: string })
                 <th>Status</th>
                 <th>Name / Job</th>
                 <th>Created</th>
+                {props.onJobAction && <th>Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -139,6 +223,15 @@ function DataPanel(props: { title: string; rows: unknown[]; emptyText: string })
                     <td>{String(item.status ?? "")}</td>
                     <td>{String(item.name ?? job?.name ?? item.jobId ?? "")}</td>
                     <td>{String(item.createdAt ?? "")}</td>
+                    {props.onJobAction && (
+                      <td>
+                        <div className="row-actions">
+                          <button onClick={() => props.onJobAction?.(String(item.id), "run")}>Run</button>
+                          <button onClick={() => props.onJobAction?.(String(item.id), "pause")}>Pause</button>
+                          <button onClick={() => props.onJobAction?.(String(item.id), "resume")}>Resume</button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 );
               })}
