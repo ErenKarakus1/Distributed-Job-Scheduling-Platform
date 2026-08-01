@@ -1,5 +1,6 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
+import { createApiClient } from "./api.js";
 import { AuditPanel, DataPanel, FilterBar, OverviewPanel, Pager, UserPanel, WorkerPanel } from "./components.js";
 import { AuditFilterBar, JobCreateForm } from "./forms.js";
 import { parseOptionalJson } from "./json.js";
@@ -55,6 +56,7 @@ function App() {
   const [health, setHealth] = React.useState<Record<string, unknown>>({});
   const [activeView, setActiveView] = React.useState<"overview" | "jobs" | "executions" | "workers" | "users" | "audit" | "health">("overview");
   const [message, setMessage] = React.useState("Ready");
+  const { authRequest, request } = React.useMemo(() => createApiClient({ apiBaseUrl, apiKey, authToken }), [apiBaseUrl, apiKey, authToken]);
 
   React.useEffect(() => {
     if (!authToken) {
@@ -65,45 +67,6 @@ function App() {
     localStorage.setItem("scheduler.jwt", authToken);
     void loadCurrentUser(authToken);
   }, [authToken, apiBaseUrl]);
-
-  async function request<T>(path: string, options: RequestInit = {}) {
-    const response = await fetch(`${apiBaseUrl}${path}`, {
-      ...options,
-      headers: {
-        ...(apiKey ? { "x-api-key": apiKey } : {}),
-        ...(!apiKey && authToken ? { authorization: `Bearer ${authToken}` } : {}),
-        ...(options.body ? { "content-type": "application/json" } : {}),
-        ...options.headers,
-      },
-    });
-
-    const body = (await response.json()) as T;
-
-    if (!response.ok) {
-      throw new Error(JSON.stringify(body));
-    }
-
-    return body;
-  }
-
-  async function authRequest<T>(path: string, options: RequestInit = {}, token = authToken) {
-    const response = await fetch(`${apiBaseUrl}${path}`, {
-      ...options,
-      headers: {
-        ...(token ? { authorization: `Bearer ${token}` } : {}),
-        ...(options.body ? { "content-type": "application/json" } : {}),
-        ...options.headers,
-      },
-    });
-
-    const body = (await response.json()) as T;
-
-    if (!response.ok) {
-      throw new Error(JSON.stringify(body));
-    }
-
-    return body;
-  }
 
   async function loadCurrentUser(token = authToken) {
     try {
