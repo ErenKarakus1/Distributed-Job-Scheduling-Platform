@@ -2,6 +2,7 @@ import express from "express";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
+import { calculateStaleBefore, isExecutionStale, planStalledExecutionRecovery } from "./recovery.js";
 import { calculateBackoffDelayMs } from "./retry.js";
 
 const app = express();
@@ -112,7 +113,7 @@ function sendValidationError(res: express.Response, error: unknown) {
 }
 
 async function recoverStalledExecutions(now = new Date()) {
-  const staleBefore = new Date(now.getTime() - stalledAfterMs);
+  const staleBefore = calculateStaleBefore(now, stalledAfterMs);
   const stalledExecutions = await prisma.execution.findMany({
     where: {
       status: "RUNNING",
@@ -133,41 +134,37 @@ async function recoverStalledExecutions(now = new Date()) {
         include: { job: true },
       });
 
-      if (!current || current.status !== "RUNNING" || !current.lastHeartbeatAt || current.lastHeartbeatAt >= staleBefore) {
+      if (!current || current.status !== "RUNNING" || !isExecutionStale(current, staleBefore)) {
         return;
       }
 
-      const attemptNumber = current.attemptCount + 1;
-      const retryable = attemptNumber < current.job.maxAttempts;
-      const nextAttemptAt = retryable
-        ? new Date(now.getTime() + calculateBackoffDelayMs(current.job, attemptNumber + 1))
-        : null;
+      const recovery = planStalledExecutionRecovery(current, now, stalledAfterMs);
 
       await tx.executionAttempt.create({
         data: {
           executionId: current.id,
-          attemptNumber,
+          attemptNumber: recovery.attemptNumber,
           workerId: current.lockedByWorkerId,
           status: "FAILED",
-          errorMessage: `Execution stalled after ${stalledAfterMs}ms without heartbeat`,
-          startedAt: current.startedAt ?? current.lastHeartbeatAt,
+          errorMessage: recovery.errorMessage,
+          startedAt: recovery.startedAt,
           finishedAt: now,
-          durationMs: current.startedAt ? now.getTime() - current.startedAt.getTime() : undefined,
+          durationMs: recovery.durationMs,
         },
       });
 
       await tx.execution.update({
         where: { id: current.id },
         data: {
-          attemptCount: attemptNumber,
-          status: retryable ? "RETRY_SCHEDULED" : "FAILED",
-          nextAttemptAt,
+          attemptCount: recovery.attemptNumber,
+          status: recovery.status,
+          nextAttemptAt: recovery.nextAttemptAt,
           lockedByWorkerId: null,
-          finishedAt: retryable ? null : now,
+          finishedAt: recovery.finishedAt,
         },
       });
 
-      if (retryable) {
+      if (recovery.retryable) {
         retryScheduled += 1;
       } else {
         failed += 1;
