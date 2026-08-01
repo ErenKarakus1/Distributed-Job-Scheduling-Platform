@@ -70,6 +70,7 @@ function App() {
       ...options,
       headers: {
         ...(apiKey ? { "x-api-key": apiKey } : {}),
+        ...(!apiKey && authToken ? { authorization: `Bearer ${authToken}` } : {}),
         ...(options.body ? { "content-type": "application/json" } : {}),
         ...options.headers,
       },
@@ -319,7 +320,7 @@ function App() {
           {authUser ? (
             <>
               <span>
-                {authUser.name} · {authUser.role}
+                {authUser.name} / {authUser.role}
               </span>
               <button onClick={signOut}>Sign out</button>
             </>

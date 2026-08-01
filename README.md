@@ -100,6 +100,13 @@ curl http://localhost:3000/api/jobs ^
   -H "x-api-key: djsp_your_key"
 ```
 
+The gateway also accepts dashboard JWTs on `/api/*` routes:
+
+```bash
+curl http://localhost:3000/api/jobs ^
+  -H "authorization: Bearer YOUR_JWT"
+```
+
 List development API keys:
 
 ```bash

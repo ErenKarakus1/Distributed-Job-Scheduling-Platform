@@ -62,7 +62,7 @@ app.use(
 
       callback(new Error("Origin is not allowed by CORS"));
     },
-    allowedHeaders: ["content-type", "x-api-key", "x-request-id"],
+    allowedHeaders: ["authorization", "content-type", "x-api-key", "x-request-id"],
     methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
   }),
 );
@@ -187,6 +187,15 @@ async function requireJwt(req: express.Request, res: express.Response, next: exp
   } catch {
     res.status(401).json({ error: "Invalid bearer token" });
   }
+}
+
+async function requireApiAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
+  if (readApiKey(req)) {
+    await requireApiKey(req, res, next);
+    return;
+  }
+
+  await requireJwt(req, res, next);
 }
 
 async function forwardRequest(req: express.Request, res: express.Response, target: ServiceTarget, path: string) {
@@ -392,7 +401,7 @@ app.get("/auth/me", requireJwt, (_req, res) => {
   res.json({ user: res.locals.user });
 });
 
-app.use("/api", requireApiKey);
+app.use("/api", requireApiAuth);
 
 app.all("/api/jobs", (req, res) => {
   void forwardRequest(req, res, services.job, "/jobs");
