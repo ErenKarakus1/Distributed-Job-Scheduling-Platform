@@ -155,6 +155,10 @@ app.all("/api/jobs/:id", (req, res) => {
   void forwardRequest(req, res, services.job, `/jobs/${req.params.id}`);
 });
 
+app.all("/api/jobs/:id/:action", (req, res) => {
+  void forwardRequest(req, res, services.job, `/jobs/${req.params.id}/${req.params.action}`);
+});
+
 app.all("/api/executions", (req, res) => {
   void forwardRequest(req, res, services.execution, "/executions");
 });

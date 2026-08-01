@@ -18,6 +18,7 @@ type SchedulerStats = {
   oneTimeQueued: number;
   recurringQueued: number;
   retriesQueued: number;
+  pendingQueued: number;
 };
 
 let channelPromise: Promise<amqp.Channel> | undefined;
@@ -166,14 +167,33 @@ async function scheduleDueRetries(now: Date) {
   return executions.length;
 }
 
+async function scheduleDuePendingExecutions(now: Date) {
+  const executions = await prisma.execution.findMany({
+    where: {
+      status: "PENDING",
+      nextAttemptAt: { lte: now },
+      job: { status: "ACTIVE" },
+    },
+    take: batchSize,
+    orderBy: { nextAttemptAt: "asc" },
+  });
+
+  for (const execution of executions) {
+    await queueExecution(execution.id);
+  }
+
+  return executions.length;
+}
+
 async function runSchedulerOnce(now = new Date()): Promise<SchedulerStats> {
-  const [oneTimeQueued, recurringQueued, retriesQueued] = await Promise.all([
+  const [oneTimeQueued, recurringQueued, retriesQueued, pendingQueued] = await Promise.all([
     scheduleDueOneTimeJobs(now),
     scheduleDueRecurringJobs(now),
     scheduleDueRetries(now),
+    scheduleDuePendingExecutions(now),
   ]);
 
-  return { oneTimeQueued, recurringQueued, retriesQueued };
+  return { oneTimeQueued, recurringQueued, retriesQueued, pendingQueued };
 }
 
 async function runSchedulerLoop() {
@@ -185,7 +205,7 @@ async function runSchedulerLoop() {
 
   try {
     const stats = await runSchedulerOnce();
-    const queued = stats.oneTimeQueued + stats.recurringQueued + stats.retriesQueued;
+    const queued = stats.oneTimeQueued + stats.recurringQueued + stats.retriesQueued + stats.pendingQueued;
 
     if (queued > 0) {
       console.log(`scheduler queued ${queued} execution(s)`, stats);
