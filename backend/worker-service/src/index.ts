@@ -3,6 +3,8 @@ import amqp from "amqplib";
 import axios, { AxiosError } from "axios";
 import { PrismaClient } from "@prisma/client";
 import { randomUUID } from "node:crypto";
+import { calculateBackoffDelayMs, getAttemptStatus, getAxiosErrorMessage } from "./execution.js";
+import { requestIdMiddleware, requestLogger } from "./http.js";
 import { MalformedExecutionMessageError, normalizeHeaders, parseExecutionMessageContent, previewResponseBody } from "./message.js";
 
 const app = express();
@@ -25,59 +27,9 @@ let rabbitChannel: amqp.Channel | undefined;
 let consumerTag: string | undefined;
 const activeExecutions = new Set<string>();
 
-function requestLogger(service: string): express.RequestHandler {
-  return (req, res, next) => {
-    const startedAt = Date.now();
-
-    res.on("finish", () => {
-      console.log(
-        JSON.stringify({
-          level: "info",
-          event: "http_request",
-          service,
-          requestId: res.locals.requestId,
-          method: req.method,
-          path: req.originalUrl,
-          statusCode: res.statusCode,
-          durationMs: Date.now() - startedAt,
-        }),
-      );
-    });
-
-    next();
-  };
-}
-
-function requestIdMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
-  const requestId = req.header("x-request-id")?.trim() || randomUUID();
-  res.locals.requestId = requestId;
-  res.setHeader("x-request-id", requestId);
-  next();
-}
-
 app.use(requestIdMiddleware);
 app.use(requestLogger("worker-service"));
 app.use(express.json());
-
-function getAxiosErrorMessage(error: unknown) {
-  if (axios.isAxiosError(error)) {
-    return error.message;
-  }
-
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Unknown worker execution error";
-}
-
-function getAttemptStatus(error: unknown) {
-  if (axios.isAxiosError(error) && error.code === "ECONNABORTED") {
-    return "TIMED_OUT" as const;
-  }
-
-  return "FAILED" as const;
-}
 
 function parseExecutionMessage(message: amqp.Message) {
   return parseExecutionMessageContent(message.content.toString());
@@ -297,19 +249,6 @@ async function recordAttempt(input: {
       },
     });
   });
-}
-
-function calculateBackoffDelayMs(job: {
-  backoffType: "FIXED" | "EXPONENTIAL";
-  retryInitialDelayMs: number;
-  retryMaxDelayMs: number;
-}, nextAttemptNumber: number) {
-  const delay =
-    job.backoffType === "EXPONENTIAL"
-      ? job.retryInitialDelayMs * 2 ** Math.max(nextAttemptNumber - 2, 0)
-      : job.retryInitialDelayMs;
-
-  return Math.min(delay, job.retryMaxDelayMs);
 }
 
 async function startConsumer() {
