@@ -251,6 +251,52 @@ app.get("/workers", async (_req, res, next) => {
   }
 });
 
+app.get("/metrics/overview", async (_req, res, next) => {
+  try {
+    const [
+      totalJobs,
+      activeJobs,
+      pausedJobs,
+      runningExecutions,
+      queuedExecutions,
+      retryScheduledExecutions,
+      failedExecutions,
+      succeededExecutions,
+      activeWorkers,
+    ] = await Promise.all([
+      prisma.job.count({ where: { status: { not: "DELETED" } } }),
+      prisma.job.count({ where: { status: "ACTIVE" } }),
+      prisma.job.count({ where: { status: "PAUSED" } }),
+      prisma.execution.count({ where: { status: "RUNNING" } }),
+      prisma.execution.count({ where: { status: "QUEUED" } }),
+      prisma.execution.count({ where: { status: "RETRY_SCHEDULED" } }),
+      prisma.execution.count({ where: { status: "FAILED" } }),
+      prisma.execution.count({ where: { status: "SUCCEEDED" } }),
+      prisma.worker.count({ where: { status: { in: ["IDLE", "BUSY"] } } }),
+    ]);
+
+    res.json({
+      jobs: {
+        total: totalJobs,
+        active: activeJobs,
+        paused: pausedJobs,
+      },
+      executions: {
+        running: runningExecutions,
+        queued: queuedExecutions,
+        retryScheduled: retryScheduledExecutions,
+        failed: failedExecutions,
+        succeeded: succeededExecutions,
+      },
+      workers: {
+        active: activeWorkers,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/executions/:id/mark-queued", async (req, res, next) => {
   try {
     const id = parseId(req.params.id);

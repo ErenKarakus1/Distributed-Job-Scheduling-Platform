@@ -194,6 +194,10 @@ app.get("/api/workers", (req, res) => {
   void forwardRequest(req, res, services.execution, "/workers");
 });
 
+app.get("/api/metrics/overview", (req, res) => {
+  void forwardRequest(req, res, services.execution, "/metrics/overview");
+});
+
 app.post("/api/schedule/run", (req, res) => {
   void forwardRequest(req, res, services.scheduler, "/schedule/run");
 });

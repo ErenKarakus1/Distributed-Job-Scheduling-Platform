@@ -18,8 +18,9 @@ function App() {
   const [jobs, setJobs] = React.useState<unknown[]>([]);
   const [executions, setExecutions] = React.useState<unknown[]>([]);
   const [workers, setWorkers] = React.useState<unknown[]>([]);
+  const [metrics, setMetrics] = React.useState<Record<string, unknown>>({});
   const [health, setHealth] = React.useState<Record<string, unknown>>({});
-  const [activeView, setActiveView] = React.useState<"jobs" | "executions" | "workers" | "health">("jobs");
+  const [activeView, setActiveView] = React.useState<"overview" | "jobs" | "executions" | "workers" | "health">("overview");
   const [message, setMessage] = React.useState("Ready");
 
   async function request<T>(path: string, options: RequestInit = {}) {
@@ -48,6 +49,13 @@ function App() {
     setMessage(`Loaded ${body.data.length} job(s)`);
   }
 
+  async function refreshMetrics() {
+    setMessage("Loading overview");
+    const body = await request<Record<string, unknown>>("/api/metrics/overview");
+    setMetrics(body);
+    setMessage("Loaded overview");
+  }
+
   async function refreshExecutions() {
     setMessage("Loading executions");
     const body = await request<{ data: unknown[] }>("/api/executions");
@@ -71,6 +79,7 @@ function App() {
 
   async function refreshCurrentView() {
     try {
+      if (activeView === "overview") await refreshMetrics();
       if (activeView === "jobs") await refreshJobs();
       if (activeView === "executions") await refreshExecutions();
       if (activeView === "workers") await refreshWorkers();
@@ -130,6 +139,9 @@ function App() {
         </div>
 
         <nav className="nav-tabs" aria-label="Dashboard views">
+          <button className={activeView === "overview" ? "active" : ""} onClick={() => setActiveView("overview")}>
+            Overview
+          </button>
           <button className={activeView === "jobs" ? "active" : ""} onClick={() => setActiveView("jobs")}>
             Jobs
           </button>
@@ -159,6 +171,8 @@ function App() {
         </header>
 
         <div className="status-line">{message}</div>
+
+        {activeView === "overview" && <OverviewPanel metrics={metrics} />}
 
         {activeView === "jobs" && (
           <>
@@ -248,6 +262,34 @@ function App() {
         )}
       </section>
     </main>
+  );
+}
+
+function OverviewPanel(props: { metrics: Record<string, unknown> }) {
+  const jobs = (props.metrics.jobs ?? {}) as Record<string, unknown>;
+  const executions = (props.metrics.executions ?? {}) as Record<string, unknown>;
+  const workers = (props.metrics.workers ?? {}) as Record<string, unknown>;
+
+  const cards: Array<[string, unknown]> = [
+    ["Active jobs", jobs.active],
+    ["Paused jobs", jobs.paused],
+    ["Queued", executions.queued],
+    ["Running", executions.running],
+    ["Retrying", executions.retryScheduled],
+    ["Failed", executions.failed],
+    ["Succeeded", executions.succeeded],
+    ["Active workers", workers.active],
+  ];
+
+  return (
+    <section className="metric-grid" aria-label="Platform overview">
+      {cards.map(([label, value]) => (
+        <article className="metric-card" key={label}>
+          <span>{label}</span>
+          <strong>{String(value ?? "-")}</strong>
+        </article>
+      ))}
+    </section>
   );
 }
 

@@ -136,6 +136,33 @@ select {
   background: #ffffff;
 }
 
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
+  gap: 14px;
+}
+
+.metric-card {
+  display: grid;
+  gap: 10px;
+  min-height: 104px;
+  padding: 18px;
+  border: 1px solid #d8e0eb;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.metric-card span {
+  color: #53627a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.metric-card strong {
+  color: #172033;
+  font-size: 32px;
+}
+
 .create-panel {
   margin-bottom: 16px;
 }
@@ -224,6 +251,10 @@ pre {
   }
 
   .toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .metric-grid {
     grid-template-columns: 1fr;
   }
 
