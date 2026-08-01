@@ -438,11 +438,27 @@ app.post("/executions/:id/attempts", async (req, res, next) => {
 app.post("/executions/:id/cancel", async (req, res, next) => {
   try {
     const id = parseId(req.params.id);
-    const execution = await prisma.execution.update({
+
+    const existing = await prisma.execution.findUnique({
       where: { id },
+    });
+
+    if (!existing) {
+      res.status(404).json({ error: "Execution not found" });
+      return;
+    }
+
+    if (["SUCCEEDED", "FAILED", "CANCELED"].includes(existing.status)) {
+      res.status(409).json({ error: `Execution is already ${existing.status}` });
+      return;
+    }
+
+    const execution = await prisma.execution.update({
+      where: { id, status: existing.status },
       data: {
         status: "CANCELED",
         lockedByWorkerId: null,
+        nextAttemptAt: null,
         finishedAt: new Date(),
       },
       include: { job: true, attempts: true },

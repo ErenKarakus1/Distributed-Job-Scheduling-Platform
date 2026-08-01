@@ -146,8 +146,11 @@ async function executeJob(executionId: string) {
   const startedAt = new Date();
   await markWorkerBusy(executionId);
 
-  await prisma.execution.update({
-    where: { id: executionId },
+  const claimed = await prisma.execution.updateMany({
+    where: {
+      id: executionId,
+      status: { in: ["PENDING", "QUEUED", "RETRY_SCHEDULED", "STALLED"] },
+    },
     data: {
       status: "RUNNING",
       lockedByWorkerId: workerId,
@@ -155,6 +158,12 @@ async function executeJob(executionId: string) {
       lastHeartbeatAt: startedAt,
     },
   });
+
+  if (claimed.count === 0) {
+    console.warn(`execution ${executionId} could not be claimed`);
+    await markWorkerIdle();
+    return;
+  }
 
   try {
     const response = await axios.request({
@@ -218,6 +227,10 @@ async function recordAttempt(input: {
       throw new Error(`Execution ${input.executionId} not found`);
     }
 
+    if (execution.status === "CANCELED") {
+      return;
+    }
+
     const attemptNumber = execution.attemptCount + 1;
     const retryable = input.status !== "SUCCEEDED" && attemptNumber < execution.job.maxAttempts;
     const nextAttemptAt = retryable ? new Date(input.finishedAt.getTime() + calculateBackoffDelayMs(execution.job, attemptNumber + 1)) : null;
@@ -237,8 +250,12 @@ async function recordAttempt(input: {
       },
     });
 
-    await tx.execution.update({
-      where: { id: input.executionId },
+    await tx.execution.updateMany({
+      where: {
+        id: input.executionId,
+        status: "RUNNING",
+        lockedByWorkerId: workerId,
+      },
       data: {
         attemptCount: attemptNumber,
         status: input.status === "SUCCEEDED" ? "SUCCEEDED" : retryable ? "RETRY_SCHEDULED" : "FAILED",
