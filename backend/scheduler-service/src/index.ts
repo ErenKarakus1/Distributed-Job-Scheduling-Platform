@@ -20,6 +20,19 @@ const batchSize = Number(process.env.SCHEDULER_BATCH_SIZE ?? 50);
 const schedulerLockKey = process.env.SCHEDULER_LOCK_KEY ?? "scheduler:run-lock";
 const schedulerLockTtlMs = Number(process.env.SCHEDULER_LOCK_TTL_MS ?? 30000);
 
+function requestLogger(service: string): express.RequestHandler {
+  return (req, res, next) => {
+    const startedAt = Date.now();
+
+    res.on("finish", () => {
+      console.log(`${service} ${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - startedAt}ms`);
+    });
+
+    next();
+  };
+}
+
+app.use(requestLogger("scheduler-service"));
 app.use(express.json());
 
 type SchedulerStats = {

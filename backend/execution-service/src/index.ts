@@ -10,6 +10,19 @@ const recoveryIntervalMs = Number(process.env.EXECUTION_RECOVERY_INTERVAL_MS ?? 
 const recoveryBatchSize = Number(process.env.EXECUTION_RECOVERY_BATCH_SIZE ?? 50);
 let recoveryRunning = false;
 
+function requestLogger(service: string): express.RequestHandler {
+  return (req, res, next) => {
+    const startedAt = Date.now();
+
+    res.on("finish", () => {
+      console.log(`${service} ${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - startedAt}ms`);
+    });
+
+    next();
+  };
+}
+
+app.use(requestLogger("execution-service"));
 app.use(express.json());
 
 const executionStatusSchema = z.enum([

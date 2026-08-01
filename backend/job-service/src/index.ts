@@ -7,6 +7,19 @@ const app = express();
 const port = Number(process.env.JOB_SERVICE_PORT ?? 3001);
 const prisma = new PrismaClient();
 
+function requestLogger(service: string): express.RequestHandler {
+  return (req, res, next) => {
+    const startedAt = Date.now();
+
+    res.on("finish", () => {
+      console.log(`${service} ${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - startedAt}ms`);
+    });
+
+    next();
+  };
+}
+
+app.use(requestLogger("job-service"));
 app.use(express.json());
 
 const httpMethodSchema = z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]);

@@ -17,6 +17,18 @@ const allowedOrigins = (process.env.CORS_ORIGINS ?? "http://localhost:5173,http:
   .map((origin) => origin.trim())
   .filter(Boolean);
 
+function requestLogger(service: string): express.RequestHandler {
+  return (req, res, next) => {
+    const startedAt = Date.now();
+
+    res.on("finish", () => {
+      console.log(`${service} ${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - startedAt}ms`);
+    });
+
+    next();
+  };
+}
+
 app.use(
   cors({
     origin(origin, callback) {
@@ -31,6 +43,7 @@ app.use(
     methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
   }),
 );
+app.use(requestLogger("api-gateway"));
 app.use(express.json());
 
 const createApiKeySchema = z.object({
