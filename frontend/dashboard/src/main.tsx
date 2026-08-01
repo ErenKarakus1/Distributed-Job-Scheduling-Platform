@@ -1,11 +1,10 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { createApiClient } from "./api.js";
-import { AuditPanel, DataPanel, FilterBar, OverviewPanel, Pager, UserPanel, WorkerPanel } from "./components.js";
-import { AuditFilterBar, JobCreateForm } from "./forms.js";
 import { parseOptionalJson } from "./json.js";
 import { AuthStrip, type DashboardView, Sidebar, Toolbar } from "./shell.js";
 import type { AuditEvent, AuthResponse, AuthUser, NewJobFormState } from "./types.js";
+import { DashboardViews } from "./views.js";
 import "./styles.css";
 
 function App() {
@@ -298,67 +297,38 @@ function App() {
 
         <div className="status-line">{message}</div>
 
-        {activeView === "overview" && <OverviewPanel metrics={metrics} />}
-
-        {activeView === "jobs" && (
-          <>
-            <JobCreateForm job={newJob} onChange={setNewJob} onSubmit={(event) => void createJob(event)} />
-            <FilterBar
-              label="Job status"
-              value={jobStatusFilter}
-              options={["ACTIVE", "PAUSED", "DELETED"]}
-              onChange={setJobStatusFilter}
-              onApply={() => {
-                const nextPage = { ...jobPage, offset: 0 };
-                setJobPage(nextPage);
-                void refreshJobs(nextPage);
-              }}
-            />
-            <DataPanel title="Jobs" rows={jobs} emptyText="No jobs loaded" onJobAction={runJobAction} />
-            <Pager page={jobPage} onChange={setJobPage} onApply={(page) => void refreshJobs(page)} />
-          </>
-        )}
-
-        {activeView === "executions" && (
-          <>
-            <FilterBar
-              label="Execution status"
-              value={executionStatusFilter}
-              options={["PENDING", "QUEUED", "RUNNING", "SUCCEEDED", "FAILED", "RETRY_SCHEDULED", "STALLED", "CANCELED"]}
-              onChange={setExecutionStatusFilter}
-              onApply={() => {
-                const nextPage = { ...executionPage, offset: 0 };
-                setExecutionPage(nextPage);
-                void refreshExecutions(nextPage);
-              }}
-            />
-            <DataPanel title="Executions" rows={executions} emptyText="No executions loaded" expandableAttempts onExecutionAction={runExecutionAction} />
-            <Pager page={executionPage} onChange={setExecutionPage} onApply={(page) => void refreshExecutions(page)} />
-          </>
-        )}
-
-        {activeView === "workers" && (
-          <>
-            <WorkerPanel rows={workers} />
-            <Pager page={workerPage} onChange={setWorkerPage} onApply={(page) => void refreshWorkers(page)} />
-          </>
-        )}
-
-        {activeView === "users" && <UserPanel rows={users} onRoleChange={updateUserRole} />}
-
-        {activeView === "audit" && (
-          <>
-            <AuditFilterBar filters={auditFilters} onChange={setAuditFilters} onApply={() => void refreshAuditEvents()} />
-            <AuditPanel rows={auditEvents} />
-          </>
-        )}
-
-        {activeView === "health" && (
-          <section className="panel">
-            <h2>Service Health</h2>
-            <pre>{JSON.stringify(health, null, 2)}</pre>
-          </section>
-        )}
+        <DashboardViews
+          activeView={activeView}
+          auditEvents={auditEvents}
+          auditFilters={auditFilters}
+          executionPage={executionPage}
+          executionStatusFilter={executionStatusFilter}
+          executions={executions}
+          health={health}
+          jobPage={jobPage}
+          jobStatusFilter={jobStatusFilter}
+          jobs={jobs}
+          metrics={metrics}
+          newJob={newJob}
+          users={users}
+          workerPage={workerPage}
+          workers={workers}
+          onAuditFiltersChange={setAuditFilters}
+          onCreateJob={(event) => void createJob(event)}
+          onExecutionAction={runExecutionAction}
+          onExecutionPageChange={setExecutionPage}
+          onExecutionStatusFilterChange={setExecutionStatusFilter}
+          onJobAction={runJobAction}
+          onJobChange={setNewJob}
+          onJobPageChange={setJobPage}
+          onJobStatusFilterChange={setJobStatusFilter}
+          onRefreshAuditEvents={() => void refreshAuditEvents()}
+          onRefreshExecutions={(page) => void refreshExecutions(page)}
+          onRefreshJobs={(page) => void refreshJobs(page)}
+          onRefreshWorkers={(page) => void refreshWorkers(page)}
+          onUserRoleChange={updateUserRole}
+          onWorkerPageChange={setWorkerPage}
+        />
       </section>
     </main>
   );
