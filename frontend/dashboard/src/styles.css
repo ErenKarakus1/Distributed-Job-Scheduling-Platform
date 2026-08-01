@@ -199,6 +199,44 @@ select {
   font-weight: 700;
 }
 
+.link-button {
+  min-height: 32px;
+  border: 0;
+  padding: 0;
+  color: #2364aa;
+  background: transparent;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.attempt-list {
+  display: grid;
+  gap: 10px;
+  padding: 10px 0;
+}
+
+.attempt-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #d8e0eb;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.attempt-card div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.attempt-card span {
+  color: #53627a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .table-wrap {
   overflow-x: auto;
   margin-top: 14px;
