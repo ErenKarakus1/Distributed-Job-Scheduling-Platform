@@ -3,7 +3,7 @@ import cors from "cors";
 import axios, { AxiosError, Method } from "axios";
 import jwt, { type SignOptions } from "jsonwebtoken";
 import { Redis } from "ioredis";
-import { Prisma, PrismaClient } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 import { randomBytes } from "node:crypto";
 import { ZodError } from "zod";
 import {
@@ -13,10 +13,11 @@ import {
   hashPassword,
   readApiKey,
   readBearerToken,
-  routeParam,
   verifyPassword,
 } from "./auth.js";
 import { requestIdMiddleware, requestLogger } from "./http.js";
+import { registerProxyRoutes } from "./proxy-routes.js";
+import type { AuditInput, GatewayServices, ServiceTarget } from "./types.js";
 import {
   createApiKeySchema,
   loginSchema,
@@ -63,24 +64,12 @@ app.use(requestIdMiddleware);
 app.use(requestLogger("api-gateway"));
 app.use(express.json());
 
-type ServiceTarget = {
-  name: string;
-  baseUrl: string;
-};
-
-type AuditInput = {
-  action: string;
-  resourceType: string;
-  resourceId?: string;
-  metadata?: Prisma.InputJsonObject;
-};
-
 const services = {
   job: { name: "job-service", baseUrl: jobServiceUrl },
   execution: { name: "execution-service", baseUrl: executionServiceUrl },
   scheduler: { name: "scheduler-service", baseUrl: schedulerServiceUrl },
   worker: { name: "worker-service", baseUrl: workerServiceUrl },
-} satisfies Record<string, ServiceTarget>;
+} satisfies GatewayServices;
 
 function signUserToken(user: { id: string; email: string; role: string }) {
   return jwt.sign({ sub: user.id, email: user.email, role: user.role }, jwtSecret, {
@@ -535,97 +524,7 @@ app.get("/api/audit-events", async (req, res, next) => {
   }
 });
 
-app.get("/api/jobs", (req, res) => {
-  void forwardRequest(req, res, services.job, "/jobs");
-});
-
-app.post("/api/jobs", requireAdminUser, (req, res) => {
-  void forwardRequest(req, res, services.job, "/jobs", {
-    action: "job.create",
-    resourceType: "job",
-    metadata: { name: req.body?.name, type: req.body?.type },
-  });
-});
-
-app.get("/api/jobs/:id", (req, res) => {
-  void forwardRequest(req, res, services.job, `/jobs/${req.params.id}`);
-});
-
-app.patch("/api/jobs/:id", requireAdminUser, (req, res) => {
-  const jobId = routeParam(req.params.id);
-  void forwardRequest(req, res, services.job, `/jobs/${req.params.id}`, {
-    action: "job.update",
-    resourceType: "job",
-    resourceId: jobId,
-  });
-});
-
-app.delete("/api/jobs/:id", requireAdminUser, (req, res) => {
-  const jobId = routeParam(req.params.id);
-  void forwardRequest(req, res, services.job, `/jobs/${req.params.id}`, {
-    action: "job.delete",
-    resourceType: "job",
-    resourceId: jobId,
-  });
-});
-
-app.post("/api/jobs/:id/:action", requireAdminUser, (req, res) => {
-  const jobId = routeParam(req.params.id);
-  const action = routeParam(req.params.action);
-  void forwardRequest(req, res, services.job, `/jobs/${req.params.id}/${req.params.action}`, {
-    action: `job.${action}`,
-    resourceType: "job",
-    resourceId: jobId,
-  });
-});
-
-app.get("/api/executions", (req, res) => {
-  void forwardRequest(req, res, services.execution, "/executions");
-});
-
-app.post("/api/executions", requireAdminUser, (req, res) => {
-  void forwardRequest(req, res, services.execution, "/executions", {
-    action: "execution.create",
-    resourceType: "execution",
-    metadata: { jobId: req.body?.jobId },
-  });
-});
-
-app.get("/api/executions/:id", (req, res) => {
-  void forwardRequest(req, res, services.execution, `/executions/${req.params.id}`);
-});
-
-app.post("/api/executions/:id/:action", requireAdminUser, (req, res) => {
-  const executionId = routeParam(req.params.id);
-  const action = routeParam(req.params.action);
-  void forwardRequest(req, res, services.execution, `/executions/${req.params.id}/${req.params.action}`, {
-    action: `execution.${action}`,
-    resourceType: "execution",
-    resourceId: executionId,
-  });
-});
-
-app.get("/api/workers", (req, res) => {
-  void forwardRequest(req, res, services.execution, "/workers");
-});
-
-app.get("/api/metrics/overview", (req, res) => {
-  void forwardRequest(req, res, services.execution, "/metrics/overview");
-});
-
-app.post("/api/schedule/run", requireAdminUser, (req, res) => {
-  void forwardRequest(req, res, services.scheduler, "/schedule/run", {
-    action: "scheduler.run",
-    resourceType: "scheduler",
-  });
-});
-
-app.post("/api/recover/stalled", requireAdminUser, (req, res) => {
-  void forwardRequest(req, res, services.execution, "/recover/stalled", {
-    action: "execution.recover_stalled",
-    resourceType: "execution",
-  });
-});
+registerProxyRoutes(app, { services, requireAdminUser, forwardRequest });
 
 app.use((error: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(error);
