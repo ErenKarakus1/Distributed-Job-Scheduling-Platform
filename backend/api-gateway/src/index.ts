@@ -4,8 +4,8 @@ import axios, { AxiosError, Method } from "axios";
 import jwt, { type SignOptions } from "jsonwebtoken";
 import { Redis } from "ioredis";
 import { Prisma, PrismaClient } from "@prisma/client";
-import { randomBytes, randomUUID } from "node:crypto";
-import { z } from "zod";
+import { randomBytes } from "node:crypto";
+import { ZodError } from "zod";
 import {
   auditQuerySchema,
   getRateLimitIdentity,
@@ -16,6 +16,14 @@ import {
   routeParam,
   verifyPassword,
 } from "./auth.js";
+import { requestIdMiddleware, requestLogger } from "./http.js";
+import {
+  createApiKeySchema,
+  loginSchema,
+  parseRouteId,
+  registerSchema,
+  updateUserRoleSchema,
+} from "./validation.js";
 
 const app = express();
 const port = Number(process.env.API_GATEWAY_PORT ?? 3000);
@@ -37,36 +45,6 @@ const allowedOrigins = (process.env.CORS_ORIGINS ?? "http://localhost:5173,http:
   .map((origin) => origin.trim())
   .filter(Boolean);
 
-function requestLogger(service: string): express.RequestHandler {
-  return (req, res, next) => {
-    const startedAt = Date.now();
-
-    res.on("finish", () => {
-      console.log(
-        JSON.stringify({
-          level: "info",
-          event: "http_request",
-          service,
-          requestId: res.locals.requestId,
-          method: req.method,
-          path: req.originalUrl,
-          statusCode: res.statusCode,
-          durationMs: Date.now() - startedAt,
-        }),
-      );
-    });
-
-    next();
-  };
-}
-
-function requestIdMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
-  const requestId = req.header("x-request-id")?.trim() || randomUUID();
-  res.locals.requestId = requestId;
-  res.setHeader("x-request-id", requestId);
-  next();
-}
-
 app.use(
   cors({
     origin(origin, callback) {
@@ -84,23 +62,6 @@ app.use(
 app.use(requestIdMiddleware);
 app.use(requestLogger("api-gateway"));
 app.use(express.json());
-
-const createApiKeySchema = z.object({
-  name: z.string().min(1).max(120),
-});
-const registerSchema = z.object({
-  email: z.string().email().max(320).transform((email) => email.toLowerCase()),
-  name: z.string().min(1).max(120),
-  password: z.string().min(8).max(200),
-});
-const loginSchema = z.object({
-  email: z.string().email().max(320).transform((email) => email.toLowerCase()),
-  password: z.string().min(1).max(200),
-});
-const userRoleSchema = z.enum(["ADMIN", "VIEWER"]);
-const updateUserRoleSchema = z.object({
-  role: userRoleSchema,
-});
 
 type ServiceTarget = {
   name: string;
@@ -352,7 +313,7 @@ app.post("/internal/api-keys", async (req, res, next) => {
 
     res.status(201).json({ ...key, apiKey });
   } catch (error) {
-    if (error instanceof z.ZodError) {
+    if (error instanceof ZodError) {
       res.status(400).json({ error: "Validation failed", issues: error.issues });
       return;
     }
@@ -391,14 +352,14 @@ app.delete("/internal/api-keys/:id", async (req, res, next) => {
       return;
     }
 
-    const id = z.string().uuid().parse(req.params.id);
+    const id = parseRouteId(req.params.id);
     await prisma.apiKey.delete({
       where: { id },
     });
 
     res.status(204).send();
   } catch (error) {
-    if (error instanceof z.ZodError) {
+    if (error instanceof ZodError) {
       res.status(400).json({ error: "Validation failed", issues: error.issues });
       return;
     }
@@ -432,7 +393,7 @@ app.post("/auth/register", async (req, res, next) => {
 
     res.status(201).json({ user, token: signUserToken(user) });
   } catch (error) {
-    if (error instanceof z.ZodError) {
+    if (error instanceof ZodError) {
       res.status(400).json({ error: "Validation failed", issues: error.issues });
       return;
     }
@@ -468,7 +429,7 @@ app.post("/auth/login", async (req, res, next) => {
 
     res.json({ user, token: signUserToken(user) });
   } catch (error) {
-    if (error instanceof z.ZodError) {
+    if (error instanceof ZodError) {
       res.status(400).json({ error: "Validation failed", issues: error.issues });
       return;
     }
@@ -513,7 +474,7 @@ app.patch("/internal/users/:id/role", async (req, res, next) => {
       return;
     }
 
-    const id = z.string().uuid().parse(req.params.id);
+    const id = parseRouteId(req.params.id);
     const data = updateUserRoleSchema.parse(req.body);
     const user = await prisma.user.update({
       where: { id },
@@ -530,7 +491,7 @@ app.patch("/internal/users/:id/role", async (req, res, next) => {
 
     res.json(user);
   } catch (error) {
-    if (error instanceof z.ZodError) {
+    if (error instanceof ZodError) {
       res.status(400).json({ error: "Validation failed", issues: error.issues });
       return;
     }
@@ -565,7 +526,7 @@ app.get("/api/audit-events", async (req, res, next) => {
 
     res.json({ data: events });
   } catch (error) {
-    if (error instanceof z.ZodError) {
+    if (error instanceof ZodError) {
       res.status(400).json({ error: "Validation failed", issues: error.issues });
       return;
     }
