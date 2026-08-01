@@ -15,6 +15,8 @@ const redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", {
 });
 const rabbitmqUrl = process.env.RABBITMQ_URL ?? "amqp://scheduler:scheduler@localhost:5672";
 const readyQueueName = process.env.EXECUTION_READY_QUEUE ?? "execution.ready";
+const deadLetterExchangeName = process.env.EXECUTION_DEAD_LETTER_EXCHANGE ?? "execution.dead";
+const deadLetterQueueName = process.env.EXECUTION_DEAD_LETTER_QUEUE ?? "execution.dead";
 const pollIntervalMs = Number(process.env.SCHEDULER_POLL_INTERVAL_MS ?? 5000);
 const batchSize = Number(process.env.SCHEDULER_BATCH_SIZE ?? 50);
 const schedulerLockKey = process.env.SCHEDULER_LOCK_KEY ?? "scheduler:run-lock";
@@ -74,7 +76,14 @@ function getChannel() {
   channelPromise ??= amqp.connect(rabbitmqUrl).then(async (connection) => {
     rabbitConnection = connection;
     const channel = await connection.createChannel();
-    await channel.assertQueue(readyQueueName, { durable: true });
+    await channel.assertExchange(deadLetterExchangeName, "direct", { durable: true });
+    await channel.assertQueue(deadLetterQueueName, { durable: true });
+    await channel.bindQueue(deadLetterQueueName, deadLetterExchangeName, deadLetterQueueName);
+    await channel.assertQueue(readyQueueName, {
+      durable: true,
+      deadLetterExchange: deadLetterExchangeName,
+      deadLetterRoutingKey: deadLetterQueueName,
+    });
 
     connection.on("close", () => {
       channelPromise = undefined;

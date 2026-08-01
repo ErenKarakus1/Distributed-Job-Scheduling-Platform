@@ -10,6 +10,8 @@ const port = Number(process.env.WORKER_SERVICE_PORT ?? 3004);
 const prisma = new PrismaClient();
 const rabbitmqUrl = process.env.RABBITMQ_URL ?? "amqp://scheduler:scheduler@localhost:5672";
 const readyQueueName = process.env.EXECUTION_READY_QUEUE ?? "execution.ready";
+const deadLetterExchangeName = process.env.EXECUTION_DEAD_LETTER_EXCHANGE ?? "execution.dead";
+const deadLetterQueueName = process.env.EXECUTION_DEAD_LETTER_QUEUE ?? "execution.dead";
 const serviceInstanceId = process.env.WORKER_INSTANCE_ID ?? `worker-${randomUUID()}`;
 const heartbeatIntervalMs = Number(process.env.WORKER_HEARTBEAT_INTERVAL_MS ?? 10000);
 const responsePreviewLimit = Number(process.env.WORKER_RESPONSE_PREVIEW_LIMIT ?? 4000);
@@ -371,7 +373,14 @@ async function startConsumer() {
   const channel = await connection.createChannel();
   rabbitConnection = connection;
   rabbitChannel = channel;
-  await channel.assertQueue(readyQueueName, { durable: true });
+  await channel.assertExchange(deadLetterExchangeName, "direct", { durable: true });
+  await channel.assertQueue(deadLetterQueueName, { durable: true });
+  await channel.bindQueue(deadLetterQueueName, deadLetterExchangeName, deadLetterQueueName);
+  await channel.assertQueue(readyQueueName, {
+    durable: true,
+    deadLetterExchange: deadLetterExchangeName,
+    deadLetterRoutingKey: deadLetterQueueName,
+  });
   await channel.prefetch(workerConcurrency);
 
   const consumer = await channel.consume(readyQueueName, async (message) => {

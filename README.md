@@ -81,6 +81,8 @@ Default ports:
 
 Worker concurrency defaults to `1`. Increase `WORKER_CONCURRENCY` to let a worker instance process multiple queued executions at the same time.
 
+RabbitMQ uses `EXECUTION_READY_QUEUE` for runnable executions and sends rejected malformed messages to `EXECUTION_DEAD_LETTER_QUEUE` through `EXECUTION_DEAD_LETTER_EXCHANGE`.
+
 ## API Keys
 
 In development, create an API key through the gateway:
