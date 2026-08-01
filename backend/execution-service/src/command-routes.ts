@@ -3,7 +3,7 @@ import { Prisma, PrismaClient } from "@prisma/client";
 import { sendValidationError } from "./http.js";
 import { calculateBackoffDelayMs } from "./retry.js";
 import type { RecoverStalledExecutions } from "./route-types.js";
-import { heartbeatSchema, markQueuedSchema, markRunningSchema, parseId, recordAttemptSchema, recoverStalledSchema } from "./validation.js";
+import { heartbeatSchema, markQueuedSchema, markRunningSchema, parseId, recordAttemptSchema, recoverStalledSchema, retryExecutionSchema } from "./validation.js";
 
 type CommandRouteDependencies = {
   prisma: PrismaClient;
@@ -183,6 +183,50 @@ export function registerExecutionCommandRoutes(app: express.Express, deps: Comma
           lockedByWorkerId: null,
           nextAttemptAt: null,
           finishedAt: new Date(),
+        },
+        include: { job: true, attempts: true },
+      });
+
+      res.json(execution);
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+        res.status(404).json({ error: "Execution not found" });
+        return;
+      }
+
+      if (!sendValidationError(res, error)) next(error);
+    }
+  });
+
+  app.post("/executions/:id/retry", async (req, res, next) => {
+    try {
+      const id = parseId(req.params.id);
+      const data = retryExecutionSchema.parse(req.body);
+      const retryAt = data.retryAt ?? new Date();
+
+      const existing = await prisma.execution.findUnique({
+        where: { id },
+      });
+
+      if (!existing) {
+        res.status(404).json({ error: "Execution not found" });
+        return;
+      }
+
+      if (!["FAILED", "CANCELED"].includes(existing.status)) {
+        res.status(409).json({ error: `Execution cannot be retried from ${existing.status}` });
+        return;
+      }
+
+      const execution = await prisma.execution.update({
+        where: { id, status: existing.status },
+        data: {
+          status: "PENDING",
+          nextAttemptAt: retryAt,
+          lockedByWorkerId: null,
+          lastHeartbeatAt: null,
+          startedAt: null,
+          finishedAt: null,
         },
         include: { job: true, attempts: true },
       });

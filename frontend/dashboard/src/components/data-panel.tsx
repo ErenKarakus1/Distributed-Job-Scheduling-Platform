@@ -8,7 +8,7 @@ export function DataPanel(props: {
   rows: DataPanelRow[];
   emptyText: string;
   onJobAction?: (jobId: string, action: "run" | "pause" | "resume" | "edit" | "delete") => void;
-  onExecutionAction?: (executionId: string, action: "cancel") => void;
+  onExecutionAction?: (executionId: string, action: "cancel" | "retry") => void;
   expandableAttempts?: boolean;
 }) {
   const [expandedId, setExpandedId] = React.useState<string | null>(null);
@@ -39,6 +39,7 @@ export function DataPanel(props: {
                 const displayName = "name" in item ? item.name : execution.job?.name ?? execution.jobId ?? "";
                 const displayDate = item.createdAt ?? execution.startedAt ?? "";
                 const rowId = item.id ?? String(index);
+                const canRetryExecution = ["FAILED", "CANCELED"].includes(String(execution.status));
 
                 return (
                   <React.Fragment key={rowId}>
@@ -66,7 +67,12 @@ export function DataPanel(props: {
                                 <button onClick={() => props.onJobAction?.(item.id, "delete")}>Delete</button>
                               </>
                             )}
-                            {props.onExecutionAction && <button onClick={() => props.onExecutionAction?.(item.id, "cancel")}>Cancel</button>}
+                            {props.onExecutionAction && (
+                              <>
+                                <button onClick={() => props.onExecutionAction?.(item.id, "cancel")}>Cancel</button>
+                                {canRetryExecution && <button onClick={() => props.onExecutionAction?.(item.id, "retry")}>Retry</button>}
+                              </>
+                            )}
                           </div>
                         </td>
                       )}

@@ -52,6 +52,10 @@ export const recoverStalledSchema = z.object({
   now: z.coerce.date().optional(),
 });
 
+export const retryExecutionSchema = z.object({
+  retryAt: z.coerce.date().optional(),
+});
+
 export function parseId(id: string) {
   return z.string().uuid().parse(id);
 }

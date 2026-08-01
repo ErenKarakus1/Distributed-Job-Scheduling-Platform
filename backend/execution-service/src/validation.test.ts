@@ -9,6 +9,7 @@ import {
   parseId,
   recordAttemptSchema,
   recoverStalledSchema,
+  retryExecutionSchema,
 } from "./validation.js";
 
 const id = "11111111-1111-4111-8111-111111111111";
@@ -67,4 +68,10 @@ test("recoverStalledSchema coerces optional recovery time", () => {
   assert.deepEqual(recoverStalledSchema.parse({}), {});
   assert.equal(recoverStalledSchema.parse({ now: "2026-08-02T12:00:00.000Z" }).now?.toISOString(), "2026-08-02T12:00:00.000Z");
   assert.equal(recoverStalledSchema.safeParse({ now: "not-a-date" }).success, false);
+});
+
+test("retryExecutionSchema coerces optional retry time", () => {
+  assert.deepEqual(retryExecutionSchema.parse({}), {});
+  assert.equal(retryExecutionSchema.parse({ retryAt: "2026-08-02T12:00:00.000Z" }).retryAt?.toISOString(), "2026-08-02T12:00:00.000Z");
+  assert.equal(retryExecutionSchema.safeParse({ retryAt: "not-a-date" }).success, false);
 });

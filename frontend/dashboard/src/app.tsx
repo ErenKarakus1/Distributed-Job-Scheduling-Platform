@@ -211,10 +211,13 @@ export function App() {
     setMessage("Canceled job edit");
   }
 
-  async function runExecutionAction(executionId: string, action: "cancel") {
+  async function runExecutionAction(executionId: string, action: "cancel" | "retry") {
     try {
       setMessage(`${action} execution`);
       await request(`/api/executions/${executionId}/${action}`, { method: "POST" });
+      if (action === "retry") {
+        await request("/api/schedule/run", { method: "POST" });
+      }
       await refreshExecutions();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : `${action} failed`);
