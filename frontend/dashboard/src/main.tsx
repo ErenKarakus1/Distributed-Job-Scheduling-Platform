@@ -10,6 +10,8 @@ function App() {
     type: "ONE_TIME",
     method: "POST",
     url: "",
+    headers: "{\n  \"content-type\": \"application/json\"\n}",
+    body: "{\n  \"message\": \"scheduled hello\"\n}",
     runAt: new Date(Date.now() + 60000).toISOString().slice(0, 16),
     cronExpression: "*/5 * * * *",
     timezone: "UTC",
@@ -124,6 +126,8 @@ function App() {
     try {
       setMessage("Creating job");
       const isRecurring = newJob.type === "RECURRING";
+      const headers = parseOptionalJson<Record<string, string>>(newJob.headers, "Headers");
+      const body = parseOptionalJson<unknown>(newJob.body, "Body");
 
       await request("/api/jobs", {
         method: "POST",
@@ -132,6 +136,8 @@ function App() {
           type: newJob.type,
           method: newJob.method,
           url: newJob.url,
+          headers,
+          body,
           timeoutMs: newJob.timeoutMs,
           maxAttempts: newJob.maxAttempts,
           backoffType: newJob.backoffType,
@@ -147,7 +153,7 @@ function App() {
             : undefined,
         }),
       });
-      setNewJob((current) => ({ ...current, name: "", url: "" }));
+      setNewJob((current) => ({ ...current, name: "", url: "", body: "" }));
       await refreshJobs();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Create job failed");
@@ -247,6 +253,14 @@ function App() {
                 <label>
                   URL
                   <input value={newJob.url} onChange={(event) => setNewJob({ ...newJob, url: event.target.value })} required />
+                </label>
+                <label className="wide-field">
+                  Headers JSON
+                  <textarea value={newJob.headers} onChange={(event) => setNewJob({ ...newJob, headers: event.target.value })} />
+                </label>
+                <label className="wide-field">
+                  Body JSON
+                  <textarea value={newJob.body} onChange={(event) => setNewJob({ ...newJob, body: event.target.value })} />
                 </label>
                 {newJob.type === "ONE_TIME" ? (
                   <label>
@@ -387,6 +401,18 @@ function App() {
       </section>
     </main>
   );
+}
+
+function parseOptionalJson<T>(value: string, label: string): T | undefined {
+  if (!value.trim()) {
+    return undefined;
+  }
+
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    throw new Error(`${label} must be valid JSON`);
+  }
 }
 
 function Pager(props: {
