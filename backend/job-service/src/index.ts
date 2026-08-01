@@ -1,6 +1,7 @@
 import express from "express";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { z } from "zod";
+import { CronExpressionParser } from "cron-parser";
 
 const app = express();
 const port = Number(process.env.JOB_SERVICE_PORT ?? 3001);
@@ -14,6 +15,18 @@ const jobStatusSchema = z.enum(["ACTIVE", "PAUSED", "DELETED"]);
 const backoffTypeSchema = z.enum(["FIXED", "EXPONENTIAL"]);
 
 const jsonValueSchema = z.unknown().transform((value) => value as Prisma.InputJsonValue);
+
+function isValidCronExpression(cronExpression: string, timezone: string) {
+  try {
+    CronExpressionParser.parse(cronExpression, {
+      currentDate: new Date(),
+      tz: timezone,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 const jobPayloadSchema = z.object({
     name: z.string().min(1).max(200),
@@ -54,6 +67,14 @@ const createJobSchema = jobPayloadSchema
         path: ["schedule"],
       });
     }
+
+    if (job.schedule && !isValidCronExpression(job.schedule.cronExpression, job.schedule.timezone)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "cronExpression is invalid for the provided timezone",
+        path: ["schedule", "cronExpression"],
+      });
+    }
   });
 
 const updateJobSchema = jobPayloadSchema
@@ -67,6 +88,14 @@ const updateJobSchema = jobPayloadSchema
         code: z.ZodIssueCode.custom,
         message: "retryInitialDelayMs must be less than or equal to retryMaxDelayMs",
         path: ["retryInitialDelayMs"],
+      });
+    }
+
+    if (job.schedule && !isValidCronExpression(job.schedule.cronExpression, job.schedule.timezone)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "cronExpression is invalid for the provided timezone",
+        path: ["schedule", "cronExpression"],
       });
     }
   });
