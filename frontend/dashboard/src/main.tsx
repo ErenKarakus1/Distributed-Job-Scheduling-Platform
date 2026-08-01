@@ -50,9 +50,10 @@ function App() {
   const [jobStatusFilter, setJobStatusFilter] = React.useState("");
   const [executionStatusFilter, setExecutionStatusFilter] = React.useState("");
   const [workers, setWorkers] = React.useState<unknown[]>([]);
+  const [users, setUsers] = React.useState<AuthUser[]>([]);
   const [metrics, setMetrics] = React.useState<Record<string, unknown>>({});
   const [health, setHealth] = React.useState<Record<string, unknown>>({});
-  const [activeView, setActiveView] = React.useState<"overview" | "jobs" | "executions" | "workers" | "health">("overview");
+  const [activeView, setActiveView] = React.useState<"overview" | "jobs" | "executions" | "workers" | "users" | "health">("overview");
   const [message, setMessage] = React.useState("Ready");
 
   React.useEffect(() => {
@@ -162,6 +163,13 @@ function App() {
     setMessage(`Loaded ${body.data.length} worker(s)`);
   }
 
+  async function refreshUsers() {
+    setMessage("Loading users");
+    const body = await authRequest<{ data: AuthUser[] }>("/internal/users");
+    setUsers(body.data);
+    setMessage(`Loaded ${body.data.length} user(s)`);
+  }
+
   async function refreshHealth() {
     setMessage("Loading service health");
     const body = await request<Record<string, unknown>>("/health/services");
@@ -175,6 +183,7 @@ function App() {
       if (activeView === "jobs") await refreshJobs();
       if (activeView === "executions") await refreshExecutions();
       if (activeView === "workers") await refreshWorkers();
+      if (activeView === "users") await refreshUsers();
       if (activeView === "health") await refreshHealth();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Request failed");
@@ -276,6 +285,19 @@ function App() {
     setMessage("Signed out");
   }
 
+  async function updateUserRole(userId: string, role: "ADMIN" | "VIEWER") {
+    try {
+      setMessage("Updating user role");
+      await authRequest(`/internal/users/${userId}/role`, {
+        method: "PATCH",
+        body: JSON.stringify({ role }),
+      });
+      await refreshUsers();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Role update failed");
+    }
+  }
+
   return (
     <main className="app-shell">
       <aside className="sidebar">
@@ -296,6 +318,9 @@ function App() {
           </button>
           <button className={activeView === "workers" ? "active" : ""} onClick={() => setActiveView("workers")}>
             Workers
+          </button>
+          <button className={activeView === "users" ? "active" : ""} onClick={() => setActiveView("users")}>
+            Users
           </button>
           <button className={activeView === "health" ? "active" : ""} onClick={() => setActiveView("health")}>
             Health
@@ -524,6 +549,8 @@ function App() {
           </>
         )}
 
+        {activeView === "users" && <UserPanel rows={users} onRoleChange={updateUserRole} />}
+
         {activeView === "health" && (
           <section className="panel">
             <h2>Service Health</h2>
@@ -672,6 +699,45 @@ function WorkerPanel(props: { rows: unknown[] }) {
                   </tr>
                 );
               })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function UserPanel(props: { rows: AuthUser[]; onRoleChange: (userId: string, role: "ADMIN" | "VIEWER") => void }) {
+  return (
+    <section className="panel">
+      <h2>Users</h2>
+      {props.rows.length === 0 ? (
+        <p className="empty-state">No users loaded</p>
+      ) : (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Email</th>
+                <th>Name</th>
+                <th>Role</th>
+                <th>ID</th>
+              </tr>
+            </thead>
+            <tbody>
+              {props.rows.map((user) => (
+                <tr key={user.id}>
+                  <td>{user.email}</td>
+                  <td>{user.name}</td>
+                  <td>
+                    <select className="inline-select" value={user.role} onChange={(event) => props.onRoleChange(user.id, event.target.value as "ADMIN" | "VIEWER")}>
+                      <option value="ADMIN">ADMIN</option>
+                      <option value="VIEWER">VIEWER</option>
+                    </select>
+                  </td>
+                  <td>{user.id}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

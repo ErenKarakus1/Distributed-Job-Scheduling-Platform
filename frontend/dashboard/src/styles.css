@@ -337,6 +337,15 @@ textarea {
   background: #d8e0eb;
 }
 
+.inline-select {
+  width: auto;
+  min-width: 112px;
+  height: 32px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .attempt-list {
   display: grid;
   gap: 10px;
