@@ -107,6 +107,8 @@ curl http://localhost:3000/api/jobs ^
   -H "authorization: Bearer YOUR_JWT"
 ```
 
+JWT users with the `VIEWER` role can read dashboard data. Mutating API routes require an `ADMIN` JWT or an API key.
+
 List development API keys:
 
 ```bash

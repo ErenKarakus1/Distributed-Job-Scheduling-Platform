@@ -198,6 +198,20 @@ async function requireApiAuth(req: express.Request, res: express.Response, next:
   await requireJwt(req, res, next);
 }
 
+function requireAdminUser(req: express.Request, res: express.Response, next: express.NextFunction) {
+  if (readApiKey(req)) {
+    next();
+    return;
+  }
+
+  if (res.locals.user?.role !== "ADMIN") {
+    res.status(403).json({ error: "Admin role is required" });
+    return;
+  }
+
+  next();
+}
+
 async function forwardRequest(req: express.Request, res: express.Response, target: ServiceTarget, path: string) {
   try {
     const response = await axios.request({
@@ -403,27 +417,43 @@ app.get("/auth/me", requireJwt, (_req, res) => {
 
 app.use("/api", requireApiAuth);
 
-app.all("/api/jobs", (req, res) => {
+app.get("/api/jobs", (req, res) => {
   void forwardRequest(req, res, services.job, "/jobs");
 });
 
-app.all("/api/jobs/:id", (req, res) => {
+app.post("/api/jobs", requireAdminUser, (req, res) => {
+  void forwardRequest(req, res, services.job, "/jobs");
+});
+
+app.get("/api/jobs/:id", (req, res) => {
   void forwardRequest(req, res, services.job, `/jobs/${req.params.id}`);
 });
 
-app.all("/api/jobs/:id/:action", (req, res) => {
+app.patch("/api/jobs/:id", requireAdminUser, (req, res) => {
+  void forwardRequest(req, res, services.job, `/jobs/${req.params.id}`);
+});
+
+app.delete("/api/jobs/:id", requireAdminUser, (req, res) => {
+  void forwardRequest(req, res, services.job, `/jobs/${req.params.id}`);
+});
+
+app.post("/api/jobs/:id/:action", requireAdminUser, (req, res) => {
   void forwardRequest(req, res, services.job, `/jobs/${req.params.id}/${req.params.action}`);
 });
 
-app.all("/api/executions", (req, res) => {
+app.get("/api/executions", (req, res) => {
   void forwardRequest(req, res, services.execution, "/executions");
 });
 
-app.all("/api/executions/:id", (req, res) => {
+app.post("/api/executions", requireAdminUser, (req, res) => {
+  void forwardRequest(req, res, services.execution, "/executions");
+});
+
+app.get("/api/executions/:id", (req, res) => {
   void forwardRequest(req, res, services.execution, `/executions/${req.params.id}`);
 });
 
-app.all("/api/executions/:id/:action", (req, res) => {
+app.post("/api/executions/:id/:action", requireAdminUser, (req, res) => {
   void forwardRequest(req, res, services.execution, `/executions/${req.params.id}/${req.params.action}`);
 });
 
@@ -435,11 +465,11 @@ app.get("/api/metrics/overview", (req, res) => {
   void forwardRequest(req, res, services.execution, "/metrics/overview");
 });
 
-app.post("/api/schedule/run", (req, res) => {
+app.post("/api/schedule/run", requireAdminUser, (req, res) => {
   void forwardRequest(req, res, services.scheduler, "/schedule/run");
 });
 
-app.post("/api/recover/stalled", (req, res) => {
+app.post("/api/recover/stalled", requireAdminUser, (req, res) => {
   void forwardRequest(req, res, services.execution, "/recover/stalled");
 });
 
