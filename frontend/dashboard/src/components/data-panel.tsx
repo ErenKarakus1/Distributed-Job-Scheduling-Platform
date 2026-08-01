@@ -1,8 +1,11 @@
 import React from "react";
+import type { ExecutionAttempt, ExecutionRow, JobRow } from "../types.js";
+
+type DataPanelRow = JobRow | ExecutionRow;
 
 export function DataPanel(props: {
   title: string;
-  rows: unknown[];
+  rows: DataPanelRow[];
   emptyText: string;
   onJobAction?: (jobId: string, action: "run" | "pause" | "resume") => void;
   onExecutionAction?: (executionId: string, action: "cancel") => void;
@@ -30,18 +33,18 @@ export function DataPanel(props: {
             </thead>
             <tbody>
               {props.rows.map((row, index) => {
-                const item = row as Record<string, unknown>;
-                const job = item.job as Record<string, unknown> | undefined;
-                const attempts = Array.isArray(item.attempts) ? item.attempts : [];
-                const displayName = item.name ?? item.serviceInstanceId ?? job?.name ?? item.jobId ?? "";
-                const displayDate = item.createdAt ?? item.lastHeartbeatAt ?? item.startedAt ?? "";
-                const rowId = String(item.id ?? index);
+                const item = row as DataPanelRow;
+                const execution = item as ExecutionRow;
+                const attempts = execution.attempts ?? [];
+                const displayName = "name" in item ? item.name : execution.job?.name ?? execution.jobId ?? "";
+                const displayDate = item.createdAt ?? execution.startedAt ?? "";
+                const rowId = item.id ?? String(index);
 
                 return (
                   <React.Fragment key={rowId}>
                     <tr>
-                      <td>{String(item.id ?? "")}</td>
-                      <td>{String(item.status ?? "")}</td>
+                      <td>{item.id}</td>
+                      <td>{item.status}</td>
                       <td>{String(displayName)}</td>
                       <td>{String(displayDate)}</td>
                       {props.expandableAttempts && (
@@ -56,12 +59,12 @@ export function DataPanel(props: {
                           <div className="row-actions">
                             {props.onJobAction && (
                               <>
-                                <button onClick={() => props.onJobAction?.(String(item.id), "run")}>Run</button>
-                                <button onClick={() => props.onJobAction?.(String(item.id), "pause")}>Pause</button>
-                                <button onClick={() => props.onJobAction?.(String(item.id), "resume")}>Resume</button>
+                                <button onClick={() => props.onJobAction?.(item.id, "run")}>Run</button>
+                                <button onClick={() => props.onJobAction?.(item.id, "pause")}>Pause</button>
+                                <button onClick={() => props.onJobAction?.(item.id, "resume")}>Resume</button>
                               </>
                             )}
-                            {props.onExecutionAction && <button onClick={() => props.onExecutionAction?.(String(item.id), "cancel")}>Cancel</button>}
+                            {props.onExecutionAction && <button onClick={() => props.onExecutionAction?.(item.id, "cancel")}>Cancel</button>}
                           </div>
                         </td>
                       )}
@@ -84,7 +87,7 @@ export function DataPanel(props: {
   );
 }
 
-function AttemptDetails(props: { attempts: unknown[] }) {
+function AttemptDetails(props: { attempts: ExecutionAttempt[] }) {
   if (props.attempts.length === 0) {
     return <p className="empty-state">No attempts recorded</p>;
   }
@@ -92,17 +95,16 @@ function AttemptDetails(props: { attempts: unknown[] }) {
   return (
     <div className="attempt-list">
       {props.attempts.map((attempt, index) => {
-        const item = attempt as Record<string, unknown>;
-        const errorMessage = item.errorMessage ? String(item.errorMessage) : undefined;
-        const responseBodyPreview = item.responseBodyPreview ? String(item.responseBodyPreview) : undefined;
+        const errorMessage = attempt.errorMessage ? String(attempt.errorMessage) : undefined;
+        const responseBodyPreview = attempt.responseBodyPreview ? String(attempt.responseBodyPreview) : undefined;
 
         return (
-          <article className="attempt-card" key={String(item.id ?? index)}>
+          <article className="attempt-card" key={String(attempt.id ?? index)}>
             <div>
-              <strong>Attempt {String(item.attemptNumber ?? index + 1)}</strong>
-              <span>{String(item.status ?? "")}</span>
-              <span>{item.httpStatusCode ? `HTTP ${String(item.httpStatusCode)}` : "No status code"}</span>
-              <span>{item.durationMs ? `${String(item.durationMs)}ms` : "No duration"}</span>
+              <strong>Attempt {String(attempt.attemptNumber ?? index + 1)}</strong>
+              <span>{String(attempt.status ?? "")}</span>
+              <span>{attempt.httpStatusCode ? `HTTP ${String(attempt.httpStatusCode)}` : "No status code"}</span>
+              <span>{attempt.durationMs ? `${String(attempt.durationMs)}ms` : "No duration"}</span>
             </div>
             {errorMessage && <pre>{errorMessage}</pre>}
             {responseBodyPreview && <pre>{responseBodyPreview}</pre>}

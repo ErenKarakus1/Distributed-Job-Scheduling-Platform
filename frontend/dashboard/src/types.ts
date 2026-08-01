@@ -22,10 +22,58 @@ export type AuditEvent = {
   createdAt: string;
 };
 
+export type JobSchedule = {
+  cronExpression?: string;
+  nextRunAt?: string;
+  timezone?: string;
+};
+
+export type JobRow = {
+  id: string;
+  name: string;
+  status: string;
+  createdAt: string;
+  schedule?: JobSchedule | null;
+};
+
+export type ExecutionAttempt = {
+  id?: string;
+  attemptNumber?: number;
+  status?: string;
+  httpStatusCode?: number | null;
+  durationMs?: number | null;
+  errorMessage?: string | null;
+  responseBodyPreview?: string | null;
+};
+
+export type ExecutionRow = {
+  id: string;
+  jobId?: string;
+  status: string;
+  createdAt?: string;
+  startedAt?: string | null;
+  job?: Pick<JobRow, "id" | "name"> | null;
+  attempts?: ExecutionAttempt[];
+};
+
+export type WorkerRow = {
+  id: string;
+  serviceInstanceId?: string;
+  status?: string;
+  activeExecutionCount?: number;
+  currentExecutionId?: string | null;
+  lastHeartbeatAt?: string;
+};
+
 export type PageState = {
   limit: number;
   offset: number;
   total: number;
+};
+
+export type PageResponse<T> = {
+  data: T[];
+  page: PageState;
 };
 
 export type NewJobFormState = {

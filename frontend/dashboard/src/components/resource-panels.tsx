@@ -1,6 +1,6 @@
-import type { AuditEvent, AuthUser } from "../types.js";
+import type { AuditEvent, AuthUser, WorkerRow } from "../types.js";
 
-export function WorkerPanel(props: { rows: unknown[] }) {
+export function WorkerPanel(props: { rows: WorkerRow[] }) {
   return (
     <section className="panel">
       <h2>Workers</h2>
@@ -19,18 +19,16 @@ export function WorkerPanel(props: { rows: unknown[] }) {
               </tr>
             </thead>
             <tbody>
-              {props.rows.map((row, index) => {
-                const worker = row as Record<string, unknown>;
-
+              {props.rows.map((worker, index) => {
                 return (
-                  <tr key={String(worker.id ?? index)}>
-                    <td>{String(worker.serviceInstanceId ?? worker.id ?? "")}</td>
+                  <tr key={worker.id ?? String(index)}>
+                    <td>{worker.serviceInstanceId ?? worker.id ?? ""}</td>
                     <td>
                       <span className={`status-pill ${String(worker.status ?? "").toLowerCase()}`}>{String(worker.status ?? "")}</span>
                     </td>
-                    <td>{String(worker.activeExecutionCount ?? 0)}</td>
-                    <td>{String(worker.currentExecutionId ?? "-")}</td>
-                    <td>{String(worker.lastHeartbeatAt ?? "")}</td>
+                    <td>{worker.activeExecutionCount ?? 0}</td>
+                    <td>{worker.currentExecutionId ?? "-"}</td>
+                    <td>{worker.lastHeartbeatAt ?? ""}</td>
                   </tr>
                 );
               })}

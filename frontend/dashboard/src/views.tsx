@@ -1,7 +1,7 @@
 import { AuditPanel, DataPanel, FilterBar, OverviewPanel, Pager, UserPanel, WorkerPanel } from "./components.js";
 import { AuditFilterBar, JobCreateForm } from "./forms.js";
 import type { DashboardView } from "./shell.js";
-import type { AuditEvent, AuditFilters, AuthUser, NewJobFormState, PageState } from "./types.js";
+import type { AuditEvent, AuditFilters, AuthUser, ExecutionRow, JobRow, NewJobFormState, PageState, WorkerRow } from "./types.js";
 
 type DashboardViewsProps = {
   activeView: DashboardView;
@@ -9,16 +9,16 @@ type DashboardViewsProps = {
   auditFilters: AuditFilters;
   executionPage: PageState;
   executionStatusFilter: string;
-  executions: unknown[];
+  executions: ExecutionRow[];
   health: Record<string, unknown>;
   jobPage: PageState;
   jobStatusFilter: string;
-  jobs: unknown[];
+  jobs: JobRow[];
   metrics: Record<string, unknown>;
   newJob: NewJobFormState;
   users: AuthUser[];
   workerPage: PageState;
-  workers: unknown[];
+  workers: WorkerRow[];
   onAuditFiltersChange: (filters: AuditFilters) => void;
   onCreateJob: (event: React.FormEvent<HTMLFormElement>) => void;
   onExecutionAction: (executionId: string, action: "cancel") => void;

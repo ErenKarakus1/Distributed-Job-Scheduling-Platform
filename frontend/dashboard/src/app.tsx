@@ -2,7 +2,7 @@ import React from "react";
 import { createApiClient } from "./api.js";
 import { parseOptionalJson } from "./json.js";
 import { AuthStrip, type DashboardView, Sidebar, Toolbar } from "./shell.js";
-import type { AuditEvent, AuthResponse, AuthUser, NewJobFormState } from "./types.js";
+import type { AuditEvent, AuthResponse, AuthUser, ExecutionRow, JobRow, NewJobFormState, PageResponse, WorkerRow } from "./types.js";
 import { DashboardViews } from "./views.js";
 
 export function App() {
@@ -33,14 +33,14 @@ export function App() {
     retryMaxDelayMs: 60000,
     timeoutMs: 30000,
   });
-  const [jobs, setJobs] = React.useState<unknown[]>([]);
-  const [executions, setExecutions] = React.useState<unknown[]>([]);
+  const [jobs, setJobs] = React.useState<JobRow[]>([]);
+  const [executions, setExecutions] = React.useState<ExecutionRow[]>([]);
   const [jobPage, setJobPage] = React.useState({ limit: 25, offset: 0, total: 0 });
   const [executionPage, setExecutionPage] = React.useState({ limit: 25, offset: 0, total: 0 });
   const [workerPage, setWorkerPage] = React.useState({ limit: 25, offset: 0, total: 0 });
   const [jobStatusFilter, setJobStatusFilter] = React.useState("");
   const [executionStatusFilter, setExecutionStatusFilter] = React.useState("");
-  const [workers, setWorkers] = React.useState<unknown[]>([]);
+  const [workers, setWorkers] = React.useState<WorkerRow[]>([]);
   const [users, setUsers] = React.useState<AuthUser[]>([]);
   const [auditEvents, setAuditEvents] = React.useState<AuditEvent[]>([]);
   const [auditFilters, setAuditFilters] = React.useState({
@@ -85,7 +85,7 @@ export function App() {
     });
     if (jobStatusFilter) params.set("status", jobStatusFilter);
 
-    const body = await request<{ data: unknown[]; page: { limit: number; offset: number; total: number } }>(`/api/jobs?${params}`);
+    const body = await request<PageResponse<JobRow>>(`/api/jobs?${params}`);
     setJobs(body.data);
     setJobPage(body.page);
     setMessage(`Loaded ${body.data.length} job(s)`);
@@ -106,7 +106,7 @@ export function App() {
     });
     if (executionStatusFilter) params.set("status", executionStatusFilter);
 
-    const body = await request<{ data: unknown[]; page: { limit: number; offset: number; total: number } }>(`/api/executions?${params}`);
+    const body = await request<PageResponse<ExecutionRow>>(`/api/executions?${params}`);
     setExecutions(body.data);
     setExecutionPage(body.page);
     setMessage(`Loaded ${body.data.length} execution(s)`);
@@ -118,7 +118,7 @@ export function App() {
       limit: String(page.limit),
       offset: String(page.offset),
     });
-    const body = await request<{ data: unknown[]; page: { limit: number; offset: number; total: number } }>(`/api/workers?${params}`);
+    const body = await request<PageResponse<WorkerRow>>(`/api/workers?${params}`);
     setWorkers(body.data);
     setWorkerPage(body.page);
     setMessage(`Loaded ${body.data.length} worker(s)`);
