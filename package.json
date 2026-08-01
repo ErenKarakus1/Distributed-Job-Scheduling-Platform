@@ -11,7 +11,15 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces",
+    "db:generate": "npm run db:generate -w @scheduler/database",
+    "db:migrate": "npm run db:migrate -w @scheduler/database",
     "dev": "npm run dev --workspaces --if-present",
+    "dev:api-gateway": "npm run dev -w @scheduler/api-gateway",
+    "dev:dashboard": "npm run dev -w @scheduler/dashboard",
+    "dev:execution-service": "npm run dev -w @scheduler/execution-service",
+    "dev:job-service": "npm run dev -w @scheduler/job-service",
+    "dev:scheduler-service": "npm run dev -w @scheduler/scheduler-service",
+    "dev:worker-service": "npm run dev -w @scheduler/worker-service",
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "format": "prettier --write ."
