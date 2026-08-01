@@ -5,6 +5,10 @@ import { z } from "zod";
 const app = express();
 const port = Number(process.env.EXECUTION_SERVICE_PORT ?? 3002);
 const prisma = new PrismaClient();
+const stalledAfterMs = Number(process.env.EXECUTION_STALLED_AFTER_MS ?? 60000);
+const recoveryIntervalMs = Number(process.env.EXECUTION_RECOVERY_INTERVAL_MS ?? 15000);
+const recoveryBatchSize = Number(process.env.EXECUTION_RECOVERY_BATCH_SIZE ?? 50);
+let recoveryRunning = false;
 
 app.use(express.json());
 
@@ -51,6 +55,10 @@ const recordAttemptSchema = z.object({
   durationMs: z.number().int().min(0).optional(),
 });
 
+const recoverStalledSchema = z.object({
+  now: z.coerce.date().optional(),
+});
+
 function parseId(id: string) {
   return z.string().uuid().parse(id);
 }
@@ -76,6 +84,98 @@ function calculateBackoffDelayMs(job: {
       : baseDelay;
 
   return Math.min(delay, job.retryMaxDelayMs);
+}
+
+async function recoverStalledExecutions(now = new Date()) {
+  const staleBefore = new Date(now.getTime() - stalledAfterMs);
+  const stalledExecutions = await prisma.execution.findMany({
+    where: {
+      status: "RUNNING",
+      lastHeartbeatAt: { lt: staleBefore },
+    },
+    include: { job: true },
+    orderBy: { lastHeartbeatAt: "asc" },
+    take: recoveryBatchSize,
+  });
+
+  let retryScheduled = 0;
+  let failed = 0;
+
+  for (const execution of stalledExecutions) {
+    await prisma.$transaction(async (tx) => {
+      const current = await tx.execution.findUnique({
+        where: { id: execution.id },
+        include: { job: true },
+      });
+
+      if (!current || current.status !== "RUNNING" || !current.lastHeartbeatAt || current.lastHeartbeatAt >= staleBefore) {
+        return;
+      }
+
+      const attemptNumber = current.attemptCount + 1;
+      const retryable = attemptNumber < current.job.maxAttempts;
+      const nextAttemptAt = retryable
+        ? new Date(now.getTime() + calculateBackoffDelayMs(current.job, attemptNumber + 1))
+        : null;
+
+      await tx.executionAttempt.create({
+        data: {
+          executionId: current.id,
+          attemptNumber,
+          workerId: current.lockedByWorkerId,
+          status: "FAILED",
+          errorMessage: `Execution stalled after ${stalledAfterMs}ms without heartbeat`,
+          startedAt: current.startedAt ?? current.lastHeartbeatAt,
+          finishedAt: now,
+          durationMs: current.startedAt ? now.getTime() - current.startedAt.getTime() : undefined,
+        },
+      });
+
+      await tx.execution.update({
+        where: { id: current.id },
+        data: {
+          attemptCount: attemptNumber,
+          status: retryable ? "RETRY_SCHEDULED" : "FAILED",
+          nextAttemptAt,
+          lockedByWorkerId: null,
+          finishedAt: retryable ? null : now,
+        },
+      });
+
+      if (retryable) {
+        retryScheduled += 1;
+      } else {
+        failed += 1;
+      }
+    });
+  }
+
+  return {
+    scanned: stalledExecutions.length,
+    retryScheduled,
+    failed,
+    staleBefore,
+  };
+}
+
+async function runRecoveryLoop() {
+  if (recoveryRunning) {
+    return;
+  }
+
+  recoveryRunning = true;
+
+  try {
+    const stats = await recoverStalledExecutions();
+
+    if (stats.scanned > 0) {
+      console.log("recovered stalled executions", stats);
+    }
+  } catch (error) {
+    console.error("stalled execution recovery failed", error);
+  } finally {
+    recoveryRunning = false;
+  }
 }
 
 app.get("/health", (_req, res) => {
@@ -300,6 +400,17 @@ app.post("/executions/:id/cancel", async (req, res, next) => {
   }
 });
 
+app.post("/recover/stalled", async (req, res, next) => {
+  try {
+    const data = recoverStalledSchema.parse(req.body);
+    const stats = await recoverStalledExecutions(data.now ?? new Date());
+
+    res.json(stats);
+  } catch (error) {
+    if (!sendValidationError(res, error)) next(error);
+  }
+});
+
 app.use((error: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(error);
   res.status(500).json({ error: "Internal server error" });
@@ -308,3 +419,5 @@ app.use((error: Error, _req: express.Request, res: express.Response, _next: expr
 app.listen(port, () => {
   console.log(`execution-service listening on port ${port}`);
 });
+
+setInterval(runRecoveryLoop, recoveryIntervalMs);
