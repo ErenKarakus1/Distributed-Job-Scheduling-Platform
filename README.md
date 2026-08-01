@@ -192,6 +192,7 @@ curl -X POST http://localhost:3000/api/jobs/JOB_ID/run ^
 ## Verification
 
 ```bash
+npm test
 npm run typecheck
 npm run build -w @scheduler/dashboard
 ```
