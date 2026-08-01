@@ -14,6 +14,11 @@ function App() {
     cronExpression: "*/5 * * * *",
     timezone: "UTC",
     nextRunAt: new Date(Date.now() + 60000).toISOString().slice(0, 16),
+    maxAttempts: 3,
+    backoffType: "EXPONENTIAL",
+    retryInitialDelayMs: 1000,
+    retryMaxDelayMs: 60000,
+    timeoutMs: 30000,
   });
   const [jobs, setJobs] = React.useState<unknown[]>([]);
   const [executions, setExecutions] = React.useState<unknown[]>([]);
@@ -103,6 +108,11 @@ function App() {
           type: newJob.type,
           method: newJob.method,
           url: newJob.url,
+          timeoutMs: newJob.timeoutMs,
+          maxAttempts: newJob.maxAttempts,
+          backoffType: newJob.backoffType,
+          retryInitialDelayMs: newJob.retryInitialDelayMs,
+          retryMaxDelayMs: newJob.retryMaxDelayMs,
           runAt: isRecurring ? undefined : new Date(newJob.runAt).toISOString(),
           schedule: isRecurring
             ? {
@@ -249,6 +259,57 @@ function App() {
                     </label>
                   </>
                 )}
+                <label>
+                  Attempts
+                  <input
+                    type="number"
+                    min="1"
+                    max="20"
+                    value={newJob.maxAttempts}
+                    onChange={(event) => setNewJob({ ...newJob, maxAttempts: Number(event.target.value) })}
+                    required
+                  />
+                </label>
+                <label>
+                  Backoff
+                  <select value={newJob.backoffType} onChange={(event) => setNewJob({ ...newJob, backoffType: event.target.value })}>
+                    <option value="EXPONENTIAL">Exponential</option>
+                    <option value="FIXED">Fixed</option>
+                  </select>
+                </label>
+                <label>
+                  Initial delay
+                  <input
+                    type="number"
+                    min="0"
+                    max="3600000"
+                    value={newJob.retryInitialDelayMs}
+                    onChange={(event) => setNewJob({ ...newJob, retryInitialDelayMs: Number(event.target.value) })}
+                    required
+                  />
+                </label>
+                <label>
+                  Max delay
+                  <input
+                    type="number"
+                    min="0"
+                    max="86400000"
+                    value={newJob.retryMaxDelayMs}
+                    onChange={(event) => setNewJob({ ...newJob, retryMaxDelayMs: Number(event.target.value) })}
+                    required
+                  />
+                </label>
+                <label>
+                  Timeout
+                  <input
+                    type="number"
+                    min="100"
+                    max="300000"
+                    value={newJob.timeoutMs}
+                    onChange={(event) => setNewJob({ ...newJob, timeoutMs: Number(event.target.value) })}
+                    required
+                  />
+                </label>
                 <button type="submit">Create</button>
               </form>
             </section>
