@@ -122,6 +122,26 @@ export function App() {
     setMessage("Loaded service health");
   }
 
+  async function runScheduler() {
+    try {
+      setMessage("Running scheduler");
+      await request("/api/schedule/run", { method: "POST" });
+      await refreshMetrics();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Scheduler run failed");
+    }
+  }
+
+  async function recoverStalledExecutions() {
+    try {
+      setMessage("Recovering stalled executions");
+      await request("/api/recover/stalled", { method: "POST" });
+      await refreshMetrics();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Stalled recovery failed");
+    }
+  }
+
   async function refreshCurrentView() {
     try {
       if (activeView === "overview") await refreshMetrics();
@@ -336,6 +356,8 @@ export function App() {
           onRefreshExecutions={(page) => void refreshExecutions(page)}
           onRefreshJobs={(page) => void refreshJobs(page)}
           onRefreshWorkers={(page) => void refreshWorkers(page)}
+          onRecoverStalled={() => void recoverStalledExecutions()}
+          onRunScheduler={() => void runScheduler()}
           onUserRoleChange={updateUserRole}
           onRevokeApiKey={revokeApiKey}
           onWorkerPageChange={setWorkerPage}

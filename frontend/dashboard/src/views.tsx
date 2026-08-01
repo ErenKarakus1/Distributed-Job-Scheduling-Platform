@@ -39,6 +39,8 @@ type DashboardViewsProps = {
   onRefreshExecutions: (page?: PageState) => void;
   onRefreshJobs: (page?: PageState) => void;
   onRefreshWorkers: (page?: PageState) => void;
+  onRecoverStalled: () => void;
+  onRunScheduler: () => void;
   onRevokeApiKey: (apiKeyId: string) => void;
   onUserRoleChange: (userId: string, role: "ADMIN" | "VIEWER") => void;
   onWorkerPageChange: (page: PageState) => void;
@@ -46,7 +48,7 @@ type DashboardViewsProps = {
 
 export function DashboardViews(props: DashboardViewsProps) {
   if (props.activeView === "overview") {
-    return <OverviewPanel metrics={props.metrics} />;
+    return <OverviewPanel metrics={props.metrics} onRecoverStalled={props.onRecoverStalled} onRunScheduler={props.onRunScheduler} />;
   }
 
   if (props.activeView === "jobs") {
