@@ -13,8 +13,9 @@ function App() {
   });
   const [jobs, setJobs] = React.useState<unknown[]>([]);
   const [executions, setExecutions] = React.useState<unknown[]>([]);
+  const [workers, setWorkers] = React.useState<unknown[]>([]);
   const [health, setHealth] = React.useState<Record<string, unknown>>({});
-  const [activeView, setActiveView] = React.useState<"jobs" | "executions" | "health">("jobs");
+  const [activeView, setActiveView] = React.useState<"jobs" | "executions" | "workers" | "health">("jobs");
   const [message, setMessage] = React.useState("Ready");
 
   async function request<T>(path: string, options: RequestInit = {}) {
@@ -50,6 +51,13 @@ function App() {
     setMessage(`Loaded ${body.data.length} execution(s)`);
   }
 
+  async function refreshWorkers() {
+    setMessage("Loading workers");
+    const body = await request<{ data: unknown[] }>("/api/workers");
+    setWorkers(body.data);
+    setMessage(`Loaded ${body.data.length} worker(s)`);
+  }
+
   async function refreshHealth() {
     setMessage("Loading service health");
     const body = await request<Record<string, unknown>>("/health/services");
@@ -61,6 +69,7 @@ function App() {
     try {
       if (activeView === "jobs") await refreshJobs();
       if (activeView === "executions") await refreshExecutions();
+      if (activeView === "workers") await refreshWorkers();
       if (activeView === "health") await refreshHealth();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Request failed");
@@ -113,6 +122,9 @@ function App() {
           </button>
           <button className={activeView === "executions" ? "active" : ""} onClick={() => setActiveView("executions")}>
             Executions
+          </button>
+          <button className={activeView === "workers" ? "active" : ""} onClick={() => setActiveView("workers")}>
+            Workers
           </button>
           <button className={activeView === "health" ? "active" : ""} onClick={() => setActiveView("health")}>
             Health
@@ -178,6 +190,10 @@ function App() {
           <DataPanel title="Executions" rows={executions} emptyText="No executions loaded" />
         )}
 
+        {activeView === "workers" && (
+          <DataPanel title="Workers" rows={workers} emptyText="No workers loaded" />
+        )}
+
         {activeView === "health" && (
           <section className="panel">
             <h2>Service Health</h2>
@@ -216,13 +232,15 @@ function DataPanel(props: {
               {props.rows.map((row, index) => {
                 const item = row as Record<string, unknown>;
                 const job = item.job as Record<string, unknown> | undefined;
+                const displayName = item.name ?? item.serviceInstanceId ?? job?.name ?? item.jobId ?? "";
+                const displayDate = item.createdAt ?? item.lastHeartbeatAt ?? item.startedAt ?? "";
 
                 return (
                   <tr key={String(item.id ?? index)}>
                     <td>{String(item.id ?? "")}</td>
                     <td>{String(item.status ?? "")}</td>
-                    <td>{String(item.name ?? job?.name ?? item.jobId ?? "")}</td>
-                    <td>{String(item.createdAt ?? "")}</td>
+                    <td>{String(displayName)}</td>
+                    <td>{String(displayDate)}</td>
                     {props.onJobAction && (
                       <td>
                         <div className="row-actions">

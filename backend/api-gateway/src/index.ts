@@ -190,6 +190,10 @@ app.all("/api/executions/:id/:action", (req, res) => {
   void forwardRequest(req, res, services.execution, `/executions/${req.params.id}/${req.params.action}`);
 });
 
+app.get("/api/workers", (req, res) => {
+  void forwardRequest(req, res, services.execution, "/workers");
+});
+
 app.post("/api/schedule/run", (req, res) => {
   void forwardRequest(req, res, services.scheduler, "/schedule/run");
 });

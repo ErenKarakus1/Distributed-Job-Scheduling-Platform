@@ -238,6 +238,19 @@ app.get("/executions/:id", async (req, res, next) => {
   }
 });
 
+app.get("/workers", async (_req, res, next) => {
+  try {
+    const workers = await prisma.worker.findMany({
+      orderBy: { lastHeartbeatAt: "desc" },
+      take: 100,
+    });
+
+    res.json({ data: workers });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/executions/:id/mark-queued", async (req, res, next) => {
   try {
     const id = parseId(req.params.id);
