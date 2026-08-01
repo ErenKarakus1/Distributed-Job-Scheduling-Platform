@@ -14,6 +14,10 @@ const heartbeatIntervalMs = Number(process.env.WORKER_HEARTBEAT_INTERVAL_MS ?? 1
 const responsePreviewLimit = Number(process.env.WORKER_RESPONSE_PREVIEW_LIMIT ?? 4000);
 
 let workerId: string | undefined;
+let heartbeatInterval: NodeJS.Timeout | undefined;
+let rabbitConnection: amqp.ChannelModel | undefined;
+let rabbitChannel: amqp.Channel | undefined;
+let consumerTag: string | undefined;
 
 function requestLogger(service: string): express.RequestHandler {
   return (req, res, next) => {
@@ -298,10 +302,12 @@ async function startConsumer() {
 
   const connection = await amqp.connect(rabbitmqUrl);
   const channel = await connection.createChannel();
+  rabbitConnection = connection;
+  rabbitChannel = channel;
   await channel.assertQueue(readyQueueName, { durable: true });
   await channel.prefetch(1);
 
-  await channel.consume(readyQueueName, async (message) => {
+  const consumer = await channel.consume(readyQueueName, async (message) => {
     if (!message) {
       return;
     }
@@ -315,8 +321,9 @@ async function startConsumer() {
       channel.nack(message, false, true);
     }
   });
+  consumerTag = consumer.consumerTag;
 
-  setInterval(() => {
+  heartbeatInterval = setInterval(() => {
     heartbeatWorker().catch((error: unknown) => {
       console.error("worker heartbeat failed", error);
     });
@@ -329,10 +336,41 @@ app.get("/health", (_req, res) => {
   res.json({ service: "worker-service", status: "ok", workerId, serviceInstanceId });
 });
 
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.log(`worker-service listening on port ${port}`);
 });
 
 startConsumer().catch((error: unknown) => {
   console.error("worker failed to start consumer", error);
+});
+
+async function shutdown(signal: string) {
+  console.log(`worker-service received ${signal}, shutting down`);
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+  }
+
+  server.close(async () => {
+    if (consumerTag) {
+      await rabbitChannel?.cancel(consumerTag);
+    }
+    await rabbitChannel?.close();
+    await rabbitConnection?.close();
+    if (workerId) {
+      await prisma.worker.update({
+        where: { id: workerId },
+        data: { status: "OFFLINE", currentExecutionId: null, lastHeartbeatAt: new Date() },
+      });
+    }
+    await prisma.$disconnect();
+    process.exit(0);
+  });
+}
+
+process.on("SIGINT", () => {
+  void shutdown("SIGINT");
+});
+
+process.on("SIGTERM", () => {
+  void shutdown("SIGTERM");
 });

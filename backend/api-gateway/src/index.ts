@@ -270,6 +270,22 @@ app.use((error: Error, _req: express.Request, res: express.Response, _next: expr
   res.status(500).json({ error: "Internal server error" });
 });
 
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.log(`api-gateway listening on port ${port}`);
+});
+
+async function shutdown(signal: string) {
+  console.log(`api-gateway received ${signal}, shutting down`);
+  server.close(async () => {
+    await prisma.$disconnect();
+    process.exit(0);
+  });
+}
+
+process.on("SIGINT", () => {
+  void shutdown("SIGINT");
+});
+
+process.on("SIGTERM", () => {
+  void shutdown("SIGTERM");
 });

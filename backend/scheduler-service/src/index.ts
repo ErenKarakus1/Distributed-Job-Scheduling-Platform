@@ -43,6 +43,8 @@ type SchedulerStats = {
 };
 
 let channelPromise: Promise<amqp.Channel> | undefined;
+let rabbitConnection: amqp.ChannelModel | undefined;
+let schedulerInterval: NodeJS.Timeout | undefined;
 let schedulerRunning = false;
 
 const scheduleRunSchema = z.object({
@@ -51,6 +53,7 @@ const scheduleRunSchema = z.object({
 
 function getChannel() {
   channelPromise ??= amqp.connect(rabbitmqUrl).then(async (connection) => {
+    rabbitConnection = connection;
     const channel = await connection.createChannel();
     await channel.assertQueue(readyQueueName, { durable: true });
 
@@ -313,8 +316,30 @@ app.use((error: Error, _req: express.Request, res: express.Response, _next: expr
   res.status(500).json({ error: "Internal server error" });
 });
 
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.log(`scheduler-service listening on port ${port}`);
 });
 
-setInterval(runSchedulerLoop, pollIntervalMs);
+schedulerInterval = setInterval(runSchedulerLoop, pollIntervalMs);
+
+async function shutdown(signal: string) {
+  console.log(`scheduler-service received ${signal}, shutting down`);
+  if (schedulerInterval) {
+    clearInterval(schedulerInterval);
+  }
+
+  server.close(async () => {
+    await rabbitConnection?.close();
+    redis.disconnect();
+    await prisma.$disconnect();
+    process.exit(0);
+  });
+}
+
+process.on("SIGINT", () => {
+  void shutdown("SIGINT");
+});
+
+process.on("SIGTERM", () => {
+  void shutdown("SIGTERM");
+});

@@ -9,6 +9,7 @@ const stalledAfterMs = Number(process.env.EXECUTION_STALLED_AFTER_MS ?? 60000);
 const recoveryIntervalMs = Number(process.env.EXECUTION_RECOVERY_INTERVAL_MS ?? 15000);
 const recoveryBatchSize = Number(process.env.EXECUTION_RECOVERY_BATCH_SIZE ?? 50);
 let recoveryRunning = false;
+let recoveryInterval: NodeJS.Timeout | undefined;
 
 function requestLogger(service: string): express.RequestHandler {
   return (req, res, next) => {
@@ -519,8 +520,28 @@ app.use((error: Error, _req: express.Request, res: express.Response, _next: expr
   res.status(500).json({ error: "Internal server error" });
 });
 
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.log(`execution-service listening on port ${port}`);
 });
 
-setInterval(runRecoveryLoop, recoveryIntervalMs);
+recoveryInterval = setInterval(runRecoveryLoop, recoveryIntervalMs);
+
+async function shutdown(signal: string) {
+  console.log(`execution-service received ${signal}, shutting down`);
+  if (recoveryInterval) {
+    clearInterval(recoveryInterval);
+  }
+
+  server.close(async () => {
+    await prisma.$disconnect();
+    process.exit(0);
+  });
+}
+
+process.on("SIGINT", () => {
+  void shutdown("SIGINT");
+});
+
+process.on("SIGTERM", () => {
+  void shutdown("SIGTERM");
+});
