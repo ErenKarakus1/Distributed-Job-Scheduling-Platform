@@ -22,6 +22,8 @@ function App() {
   });
   const [jobs, setJobs] = React.useState<unknown[]>([]);
   const [executions, setExecutions] = React.useState<unknown[]>([]);
+  const [jobStatusFilter, setJobStatusFilter] = React.useState("");
+  const [executionStatusFilter, setExecutionStatusFilter] = React.useState("");
   const [workers, setWorkers] = React.useState<unknown[]>([]);
   const [metrics, setMetrics] = React.useState<Record<string, unknown>>({});
   const [health, setHealth] = React.useState<Record<string, unknown>>({});
@@ -49,7 +51,8 @@ function App() {
 
   async function refreshJobs() {
     setMessage("Loading jobs");
-    const body = await request<{ data: unknown[] }>("/api/jobs");
+    const query = jobStatusFilter ? `?status=${encodeURIComponent(jobStatusFilter)}` : "";
+    const body = await request<{ data: unknown[] }>(`/api/jobs${query}`);
     setJobs(body.data);
     setMessage(`Loaded ${body.data.length} job(s)`);
   }
@@ -63,7 +66,8 @@ function App() {
 
   async function refreshExecutions() {
     setMessage("Loading executions");
-    const body = await request<{ data: unknown[] }>("/api/executions");
+    const query = executionStatusFilter ? `?status=${encodeURIComponent(executionStatusFilter)}` : "";
+    const body = await request<{ data: unknown[] }>(`/api/executions${query}`);
     setExecutions(body.data);
     setMessage(`Loaded ${body.data.length} execution(s)`);
   }
@@ -313,12 +317,28 @@ function App() {
                 <button type="submit">Create</button>
               </form>
             </section>
+            <FilterBar
+              label="Job status"
+              value={jobStatusFilter}
+              options={["ACTIVE", "PAUSED", "DELETED"]}
+              onChange={setJobStatusFilter}
+              onApply={() => void refreshJobs()}
+            />
             <DataPanel title="Jobs" rows={jobs} emptyText="No jobs loaded" onJobAction={runJobAction} />
           </>
         )}
 
         {activeView === "executions" && (
-          <DataPanel title="Executions" rows={executions} emptyText="No executions loaded" expandableAttempts onExecutionAction={runExecutionAction} />
+          <>
+            <FilterBar
+              label="Execution status"
+              value={executionStatusFilter}
+              options={["PENDING", "QUEUED", "RUNNING", "SUCCEEDED", "FAILED", "RETRY_SCHEDULED", "STALLED", "CANCELED"]}
+              onChange={setExecutionStatusFilter}
+              onApply={() => void refreshExecutions()}
+            />
+            <DataPanel title="Executions" rows={executions} emptyText="No executions loaded" expandableAttempts onExecutionAction={runExecutionAction} />
+          </>
         )}
 
         {activeView === "workers" && (
@@ -333,6 +353,31 @@ function App() {
         )}
       </section>
     </main>
+  );
+}
+
+function FilterBar(props: {
+  label: string;
+  value: string;
+  options: string[];
+  onChange: (value: string) => void;
+  onApply: () => void;
+}) {
+  return (
+    <section className="filter-bar">
+      <label>
+        {props.label}
+        <select value={props.value} onChange={(event) => props.onChange(event.target.value)}>
+          <option value="">All</option>
+          {props.options.map((option) => (
+            <option value={option} key={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button onClick={props.onApply}>Apply</button>
+    </section>
   );
 }
 
