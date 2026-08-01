@@ -130,6 +130,16 @@ function App() {
     }
   }
 
+  async function runExecutionAction(executionId: string, action: "cancel") {
+    try {
+      setMessage(`${action} execution`);
+      await request(`/api/executions/${executionId}/${action}`, { method: "POST" });
+      await refreshExecutions();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : `${action} failed`);
+    }
+  }
+
   return (
     <main className="app-shell">
       <aside className="sidebar">
@@ -247,7 +257,7 @@ function App() {
         )}
 
         {activeView === "executions" && (
-          <DataPanel title="Executions" rows={executions} emptyText="No executions loaded" expandableAttempts />
+          <DataPanel title="Executions" rows={executions} emptyText="No executions loaded" expandableAttempts onExecutionAction={runExecutionAction} />
         )}
 
         {activeView === "workers" && (
@@ -298,6 +308,7 @@ function DataPanel(props: {
   rows: unknown[];
   emptyText: string;
   onJobAction?: (jobId: string, action: "run" | "pause" | "resume") => void;
+  onExecutionAction?: (executionId: string, action: "cancel") => void;
   expandableAttempts?: boolean;
 }) {
   const [expandedId, setExpandedId] = React.useState<string | null>(null);
@@ -317,7 +328,7 @@ function DataPanel(props: {
                 <th>Name / Job</th>
                 <th>Created</th>
                 {props.expandableAttempts && <th>Attempts</th>}
-                {props.onJobAction && <th>Actions</th>}
+                {(props.onJobAction || props.onExecutionAction) && <th>Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -343,12 +354,17 @@ function DataPanel(props: {
                           </button>
                         </td>
                       )}
-                      {props.onJobAction && (
+                      {(props.onJobAction || props.onExecutionAction) && (
                         <td>
                           <div className="row-actions">
-                            <button onClick={() => props.onJobAction?.(String(item.id), "run")}>Run</button>
-                            <button onClick={() => props.onJobAction?.(String(item.id), "pause")}>Pause</button>
-                            <button onClick={() => props.onJobAction?.(String(item.id), "resume")}>Resume</button>
+                            {props.onJobAction && (
+                              <>
+                                <button onClick={() => props.onJobAction?.(String(item.id), "run")}>Run</button>
+                                <button onClick={() => props.onJobAction?.(String(item.id), "pause")}>Pause</button>
+                                <button onClick={() => props.onJobAction?.(String(item.id), "resume")}>Resume</button>
+                              </>
+                            )}
+                            {props.onExecutionAction && <button onClick={() => props.onExecutionAction?.(String(item.id), "cancel")}>Cancel</button>}
                           </div>
                         </td>
                       )}
