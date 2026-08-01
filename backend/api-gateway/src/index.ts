@@ -1,8 +1,10 @@
 import express from "express";
 import cors from "cors";
 import axios, { AxiosError, Method } from "axios";
+import jwt, { type SignOptions } from "jsonwebtoken";
 import { PrismaClient } from "@prisma/client";
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
+import { promisify } from "node:util";
 import { z } from "zod";
 
 const app = express();
@@ -12,6 +14,9 @@ const jobServiceUrl = process.env.JOB_SERVICE_URL ?? "http://localhost:3001";
 const executionServiceUrl = process.env.EXECUTION_SERVICE_URL ?? "http://localhost:3002";
 const schedulerServiceUrl = process.env.SCHEDULER_SERVICE_URL ?? "http://localhost:3003";
 const workerServiceUrl = process.env.WORKER_SERVICE_URL ?? "http://localhost:3004";
+const jwtSecret = process.env.JWT_SECRET ?? "development-jwt-secret-change-me";
+const jwtExpiresIn = (process.env.JWT_EXPIRES_IN ?? "8h") as SignOptions["expiresIn"];
+const scrypt = promisify(scryptCallback);
 const allowedOrigins = (process.env.CORS_ORIGINS ?? "http://localhost:5173,http://127.0.0.1:5173")
   .split(",")
   .map((origin) => origin.trim())
@@ -68,6 +73,15 @@ app.use(express.json());
 const createApiKeySchema = z.object({
   name: z.string().min(1).max(120),
 });
+const registerSchema = z.object({
+  email: z.string().email().max(320).transform((email) => email.toLowerCase()),
+  name: z.string().min(1).max(120),
+  password: z.string().min(8).max(200),
+});
+const loginSchema = z.object({
+  email: z.string().email().max(320).transform((email) => email.toLowerCase()),
+  password: z.string().min(1).max(200),
+});
 
 type ServiceTarget = {
   name: string;
@@ -83,6 +97,32 @@ const services = {
 
 function hashApiKey(apiKey: string) {
   return createHash("sha256").update(apiKey).digest("hex");
+}
+
+async function hashPassword(password: string) {
+  const salt = randomBytes(16).toString("hex");
+  const derivedKey = (await scrypt(password, salt, 64)) as Buffer;
+
+  return `scrypt:${salt}:${derivedKey.toString("hex")}`;
+}
+
+async function verifyPassword(password: string, passwordHash: string) {
+  const [algorithm, salt, expectedHash] = passwordHash.split(":");
+
+  if (algorithm !== "scrypt" || !salt || !expectedHash) {
+    return false;
+  }
+
+  const expected = Buffer.from(expectedHash, "hex");
+  const actual = (await scrypt(password, salt, expected.length)) as Buffer;
+
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
+}
+
+function signUserToken(user: { id: string; email: string; role: string }) {
+  return jwt.sign({ sub: user.id, email: user.email, role: user.role }, jwtSecret, {
+    expiresIn: jwtExpiresIn,
+  });
 }
 
 function readApiKey(req: express.Request) {
@@ -113,6 +153,40 @@ async function requireApiKey(req: express.Request, res: express.Response, next: 
   }
 
   next();
+}
+
+async function requireJwt(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const authorization = req.header("authorization");
+  const token = authorization?.startsWith("Bearer ") ? authorization.slice("Bearer ".length).trim() : undefined;
+
+  if (!token) {
+    res.status(401).json({ error: "Missing bearer token" });
+    return;
+  }
+
+  try {
+    const payload = jwt.verify(token, jwtSecret);
+
+    if (!payload || typeof payload !== "object" || typeof payload.sub !== "string") {
+      res.status(401).json({ error: "Invalid bearer token" });
+      return;
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: { id: true, email: true, name: true, role: true, createdAt: true },
+    });
+
+    if (!user) {
+      res.status(401).json({ error: "Invalid bearer token" });
+      return;
+    }
+
+    res.locals.user = user;
+    next();
+  } catch {
+    res.status(401).json({ error: "Invalid bearer token" });
+  }
 }
 
 async function forwardRequest(req: express.Request, res: express.Response, target: ServiceTarget, path: string) {
@@ -242,6 +316,80 @@ app.delete("/internal/api-keys/:id", async (req, res, next) => {
 
     next(error);
   }
+});
+
+app.post("/auth/register", async (req, res, next) => {
+  try {
+    if (process.env.NODE_ENV === "production") {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+
+    const data = registerSchema.parse(req.body);
+    const user = await prisma.user.create({
+      data: {
+        email: data.email,
+        name: data.name,
+        passwordHash: await hashPassword(data.password),
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        createdAt: true,
+      },
+    });
+
+    res.status(201).json({ user, token: signUserToken(user) });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: "Validation failed", issues: error.issues });
+      return;
+    }
+
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "P2002") {
+      res.status(409).json({ error: "User already exists" });
+      return;
+    }
+
+    next(error);
+  }
+});
+
+app.post("/auth/login", async (req, res, next) => {
+  try {
+    const data = loginSchema.parse(req.body);
+    const userWithPassword = await prisma.user.findUnique({
+      where: { email: data.email },
+    });
+
+    if (!userWithPassword || !(await verifyPassword(data.password, userWithPassword.passwordHash))) {
+      res.status(401).json({ error: "Invalid email or password" });
+      return;
+    }
+
+    const user = {
+      id: userWithPassword.id,
+      email: userWithPassword.email,
+      name: userWithPassword.name,
+      role: userWithPassword.role,
+      createdAt: userWithPassword.createdAt,
+    };
+
+    res.json({ user, token: signUserToken(user) });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: "Validation failed", issues: error.issues });
+      return;
+    }
+
+    next(error);
+  }
+});
+
+app.get("/auth/me", requireJwt, (_req, res) => {
+  res.json({ user: res.locals.user });
 });
 
 app.use("/api", requireApiKey);

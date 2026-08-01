@@ -112,6 +112,24 @@ Revoke a development API key:
 curl -X DELETE http://localhost:3000/internal/api-keys/API_KEY_ID
 ```
 
+## Dashboard JWT Auth
+
+In development, create a dashboard user:
+
+```bash
+curl -X POST http://localhost:3000/auth/register ^
+  -H "content-type: application/json" ^
+  -d "{\"email\":\"admin@example.com\",\"name\":\"Admin\",\"password\":\"password123\"}"
+```
+
+Login returns a JWT:
+
+```bash
+curl -X POST http://localhost:3000/auth/login ^
+  -H "content-type: application/json" ^
+  -d "{\"email\":\"admin@example.com\",\"password\":\"password123\"}"
+```
+
 ## Example Job
 
 Create a one-time HTTP job:
