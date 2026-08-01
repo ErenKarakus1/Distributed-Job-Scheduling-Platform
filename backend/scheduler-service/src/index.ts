@@ -1,10 +1,12 @@
 import express from "express";
 import amqp from "amqplib";
 import { Prisma, PrismaClient } from "@prisma/client";
-import { z } from "zod";
+import { ZodError } from "zod";
 import { Redis } from "ioredis";
 import { randomUUID } from "node:crypto";
 import { nextCronRun } from "./cron.js";
+import { countQueuedExecutions, type SchedulerStats } from "./stats.js";
+import { scheduleRunSchema } from "./validation.js";
 
 const app = express();
 const port = Number(process.env.SCHEDULER_SERVICE_PORT ?? 3003);
@@ -56,21 +58,10 @@ app.use(requestIdMiddleware);
 app.use(requestLogger("scheduler-service"));
 app.use(express.json());
 
-type SchedulerStats = {
-  oneTimeQueued: number;
-  recurringQueued: number;
-  retriesQueued: number;
-  pendingQueued: number;
-};
-
 let channelPromise: Promise<amqp.Channel> | undefined;
 let rabbitConnection: amqp.ChannelModel | undefined;
 let schedulerInterval: NodeJS.Timeout | undefined;
 let schedulerRunning = false;
-
-const scheduleRunSchema = z.object({
-  now: z.coerce.date().optional(),
-});
 
 function getChannel() {
   channelPromise ??= amqp.connect(rabbitmqUrl).then(async (connection) => {
@@ -290,7 +281,7 @@ async function runSchedulerLoop() {
     }
 
     const stats = result.stats;
-    const queued = stats.oneTimeQueued + stats.recurringQueued + stats.retriesQueued + stats.pendingQueued;
+    const queued = countQueuedExecutions(stats);
 
     if (queued > 0) {
       console.log(`scheduler queued ${queued} execution(s)`, stats);
@@ -318,7 +309,7 @@ app.post("/schedule/run", async (req, res, next) => {
 
     res.json(result.stats);
   } catch (error) {
-    if (error instanceof z.ZodError) {
+    if (error instanceof ZodError) {
       res.status(400).json({ error: "Validation failed", issues: error.issues });
       return;
     }
