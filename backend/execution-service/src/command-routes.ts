@@ -10,6 +10,13 @@ type CommandRouteDependencies = {
   recoverStalledExecutions: RecoverStalledExecutions;
 };
 
+class ExecutionNotFoundError extends Error {
+  constructor() {
+    super("Execution not found");
+    this.name = "ExecutionNotFoundError";
+  }
+}
+
 export function registerExecutionCommandRoutes(app: express.Express, deps: CommandRouteDependencies) {
   const { prisma, recoverStalledExecutions } = deps;
 
@@ -100,7 +107,7 @@ export function registerExecutionCommandRoutes(app: express.Express, deps: Comma
         });
 
         if (!execution) {
-          throw new Error("EXECUTION_NOT_FOUND");
+          throw new ExecutionNotFoundError();
         }
 
         const attemptNumber = execution.attemptCount + 1;
@@ -142,8 +149,8 @@ export function registerExecutionCommandRoutes(app: express.Express, deps: Comma
 
       res.status(201).json(result);
     } catch (error) {
-      if (error instanceof Error && error.message === "EXECUTION_NOT_FOUND") {
-        res.status(404).json({ error: "Execution not found" });
+      if (error instanceof ExecutionNotFoundError) {
+        res.status(404).json({ error: error.message });
         return;
       }
 

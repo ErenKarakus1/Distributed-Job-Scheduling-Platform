@@ -4,6 +4,20 @@ import { sendValidationError } from "./http.js";
 import type { JobRouteDependencies } from "./route-types.js";
 import { parseId, updateJobSchema } from "./validation.js";
 
+class JobNotFoundError extends Error {
+  constructor() {
+    super("Job not found");
+    this.name = "JobNotFoundError";
+  }
+}
+
+class JobPausedError extends Error {
+  constructor() {
+    super("Paused jobs cannot be run manually");
+    this.name = "JobPausedError";
+  }
+}
+
 export function registerJobCommandRoutes(app: express.Express, deps: JobRouteDependencies) {
   const { prisma } = deps;
 
@@ -18,11 +32,11 @@ export function registerJobCommandRoutes(app: express.Express, deps: JobRouteDep
         });
 
         if (!job || job.status === "DELETED") {
-          throw new Error("JOB_NOT_FOUND");
+          throw new JobNotFoundError();
         }
 
         if (job.status === "PAUSED") {
-          throw new Error("JOB_PAUSED");
+          throw new JobPausedError();
         }
 
         return tx.execution.create({
@@ -38,13 +52,13 @@ export function registerJobCommandRoutes(app: express.Express, deps: JobRouteDep
 
       res.status(201).json(execution);
     } catch (error) {
-      if (error instanceof Error && error.message === "JOB_NOT_FOUND") {
-        res.status(404).json({ error: "Job not found" });
+      if (error instanceof JobNotFoundError) {
+        res.status(404).json({ error: error.message });
         return;
       }
 
-      if (error instanceof Error && error.message === "JOB_PAUSED") {
-        res.status(409).json({ error: "Paused jobs cannot be run manually" });
+      if (error instanceof JobPausedError) {
+        res.status(409).json({ error: error.message });
         return;
       }
 
