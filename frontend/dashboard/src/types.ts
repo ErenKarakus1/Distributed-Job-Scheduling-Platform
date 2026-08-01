@@ -72,6 +72,12 @@ export type ExecutionRow = {
   id: string;
   jobId?: string;
   status: string;
+  scheduledFor?: string;
+  nextAttemptAt?: string | null;
+  lockedByWorkerId?: string | null;
+  lastHeartbeatAt?: string | null;
+  finishedAt?: string | null;
+  attemptCount?: number;
   createdAt?: string;
   startedAt?: string | null;
   job?: Pick<JobRow, "id" | "name"> | null;

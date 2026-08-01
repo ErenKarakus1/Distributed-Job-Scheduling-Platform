@@ -431,6 +431,45 @@ textarea {
   padding: 10px 0;
 }
 
+.execution-detail {
+  display: grid;
+  gap: 14px;
+  padding: 10px 0;
+}
+
+.execution-detail dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.execution-detail dl div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #d8e0eb;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.execution-detail dt {
+  color: #53627a;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.execution-detail dd {
+  overflow: hidden;
+  margin: 0;
+  color: #172033;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .attempt-card {
   display: grid;
   gap: 10px;
@@ -538,6 +577,10 @@ pre {
   }
 
   .audit-filter-bar {
+    grid-template-columns: 1fr;
+  }
+
+  .execution-detail dl {
     grid-template-columns: 1fr;
   }
 }

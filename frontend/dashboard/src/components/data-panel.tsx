@@ -74,7 +74,7 @@ export function DataPanel(props: {
                     {props.expandableAttempts && expandedId === rowId && (
                       <tr>
                         <td colSpan={5}>
-                          <AttemptDetails attempts={attempts} />
+                          <ExecutionDetails execution={execution} />
                         </td>
                       </tr>
                     )}
@@ -86,6 +86,35 @@ export function DataPanel(props: {
         </div>
       )}
     </section>
+  );
+}
+
+function ExecutionDetails(props: { execution: ExecutionRow }) {
+  const { execution } = props;
+  const details = [
+    ["Execution ID", execution.id],
+    ["Job ID", execution.jobId ?? execution.job?.id],
+    ["Scheduled", execution.scheduledFor],
+    ["Started", execution.startedAt],
+    ["Finished", execution.finishedAt],
+    ["Next attempt", execution.nextAttemptAt],
+    ["Locked worker", execution.lockedByWorkerId],
+    ["Last heartbeat", execution.lastHeartbeatAt],
+    ["Attempt count", execution.attemptCount],
+  ];
+
+  return (
+    <div className="execution-detail">
+      <dl>
+        {details.map(([label, value]) => (
+          <div key={label}>
+            <dt>{label}</dt>
+            <dd>{value === undefined || value === null || value === "" ? "-" : String(value)}</dd>
+          </div>
+        ))}
+      </dl>
+      <AttemptDetails attempts={execution.attempts ?? []} />
+    </div>
   );
 }
 
