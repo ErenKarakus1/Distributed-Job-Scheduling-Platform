@@ -2,6 +2,7 @@ import express from "express";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
+import { calculateBackoffDelayMs } from "./retry.js";
 
 const app = express();
 const port = Number(process.env.EXECUTION_SERVICE_PORT ?? 3002);
@@ -108,20 +109,6 @@ function sendValidationError(res: express.Response, error: unknown) {
   }
 
   return false;
-}
-
-function calculateBackoffDelayMs(job: {
-  backoffType: "FIXED" | "EXPONENTIAL";
-  retryInitialDelayMs: number;
-  retryMaxDelayMs: number;
-}, nextAttemptNumber: number) {
-  const baseDelay = job.retryInitialDelayMs;
-  const delay =
-    job.backoffType === "EXPONENTIAL"
-      ? baseDelay * 2 ** Math.max(nextAttemptNumber - 2, 0)
-      : baseDelay;
-
-  return Math.min(delay, job.retryMaxDelayMs);
 }
 
 async function recoverStalledExecutions(now = new Date()) {
