@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import axios, { AxiosError, Method } from "axios";
 import jwt, { type SignOptions } from "jsonwebtoken";
+import { Redis } from "ioredis";
 import { PrismaClient } from "@prisma/client";
 import { createHash, randomBytes, randomUUID, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
@@ -17,6 +18,12 @@ const workerServiceUrl = process.env.WORKER_SERVICE_URL ?? "http://localhost:300
 const jwtSecret = process.env.JWT_SECRET ?? "development-jwt-secret-change-me";
 const jwtExpiresIn = (process.env.JWT_EXPIRES_IN ?? "8h") as SignOptions["expiresIn"];
 const scrypt = promisify(scryptCallback);
+const redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", {
+  lazyConnect: true,
+  maxRetriesPerRequest: 3,
+});
+const rateLimitWindowMs = Number(process.env.API_RATE_LIMIT_WINDOW_MS ?? 60000);
+const rateLimitMaxRequests = Number(process.env.API_RATE_LIMIT_MAX_REQUESTS ?? 120);
 const allowedOrigins = (process.env.CORS_ORIGINS ?? "http://localhost:5173,http://127.0.0.1:5173")
   .split(",")
   .map((origin) => origin.trim())
@@ -139,6 +146,62 @@ function readApiKey(req: express.Request) {
   return headerValue.trim();
 }
 
+function readBearerToken(req: express.Request) {
+  const authorization = req.header("authorization");
+  return authorization?.startsWith("Bearer ") ? authorization.slice("Bearer ".length).trim() : undefined;
+}
+
+function getRateLimitIdentity(req: express.Request) {
+  const apiKey = readApiKey(req);
+  const bearerToken = readBearerToken(req);
+
+  if (apiKey) {
+    return `api-key:${hashApiKey(apiKey)}`;
+  }
+
+  if (bearerToken) {
+    return `jwt:${hashApiKey(bearerToken)}`;
+  }
+
+  return `ip:${req.ip}`;
+}
+
+async function rateLimitRequests(req: express.Request, res: express.Response, next: express.NextFunction) {
+  if (rateLimitMaxRequests <= 0 || rateLimitWindowMs <= 0) {
+    next();
+    return;
+  }
+
+  try {
+    if (redis.status === "wait") {
+      await redis.connect();
+    }
+
+    const windowSeconds = Math.ceil(rateLimitWindowMs / 1000);
+    const key = `rate-limit:${getRateLimitIdentity(req)}:${Math.floor(Date.now() / rateLimitWindowMs)}`;
+    const count = await redis.incr(key);
+
+    if (count === 1) {
+      await redis.expire(key, windowSeconds);
+    }
+
+    const remaining = Math.max(rateLimitMaxRequests - count, 0);
+    res.setHeader("x-ratelimit-limit", String(rateLimitMaxRequests));
+    res.setHeader("x-ratelimit-remaining", String(remaining));
+    res.setHeader("x-ratelimit-window-ms", String(rateLimitWindowMs));
+
+    if (count > rateLimitMaxRequests) {
+      res.status(429).json({ error: "Rate limit exceeded" });
+      return;
+    }
+
+    next();
+  } catch (error) {
+    console.error("rate limit check failed", error);
+    next();
+  }
+}
+
 async function requireApiKey(req: express.Request, res: express.Response, next: express.NextFunction) {
   const apiKey = readApiKey(req);
 
@@ -160,8 +223,7 @@ async function requireApiKey(req: express.Request, res: express.Response, next: 
 }
 
 async function requireJwt(req: express.Request, res: express.Response, next: express.NextFunction) {
-  const authorization = req.header("authorization");
-  const token = authorization?.startsWith("Bearer ") ? authorization.slice("Bearer ".length).trim() : undefined;
+  const token = readBearerToken(req);
 
   if (!token) {
     res.status(401).json({ error: "Missing bearer token" });
@@ -482,7 +544,7 @@ app.patch("/internal/users/:id/role", async (req, res, next) => {
   }
 });
 
-app.use("/api", requireApiAuth);
+app.use("/api", rateLimitRequests, requireApiAuth);
 
 app.get("/api/jobs", (req, res) => {
   void forwardRequest(req, res, services.job, "/jobs");
@@ -552,6 +614,7 @@ const server = app.listen(port, () => {
 async function shutdown(signal: string) {
   console.log(`api-gateway received ${signal}, shutting down`);
   server.close(async () => {
+    redis.disconnect();
     await prisma.$disconnect();
     process.exit(0);
   });

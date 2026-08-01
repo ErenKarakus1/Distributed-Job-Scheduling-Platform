@@ -83,6 +83,8 @@ Worker concurrency defaults to `1`. Increase `WORKER_CONCURRENCY` to let a worke
 
 RabbitMQ uses `EXECUTION_READY_QUEUE` for runnable executions and sends rejected malformed messages to `EXECUTION_DEAD_LETTER_QUEUE` through `EXECUTION_DEAD_LETTER_EXCHANGE`.
 
+The API gateway rate-limits `/api/*` requests through Redis. Tune `API_RATE_LIMIT_MAX_REQUESTS` and `API_RATE_LIMIT_WINDOW_MS`, or set the max requests to `0` to disable the limiter locally.
+
 ## API Keys
 
 In development, create an API key through the gateway:
