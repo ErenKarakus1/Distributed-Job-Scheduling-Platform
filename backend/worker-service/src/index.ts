@@ -3,6 +3,7 @@ import amqp from "amqplib";
 import axios, { AxiosError } from "axios";
 import { PrismaClient } from "@prisma/client";
 import { randomUUID } from "node:crypto";
+import { z } from "zod";
 
 const app = express();
 const port = Number(process.env.WORKER_SERVICE_PORT ?? 3004);
@@ -37,6 +38,17 @@ app.use(express.json());
 type ExecutionMessage = {
   executionId: string;
 };
+
+const executionMessageSchema = z.object({
+  executionId: z.string().uuid(),
+});
+
+class MalformedExecutionMessageError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "MalformedExecutionMessageError";
+  }
+}
 
 function previewResponseBody(data: unknown) {
   if (data === undefined || data === null) {
@@ -78,6 +90,27 @@ function getAttemptStatus(error: unknown) {
   }
 
   return "FAILED" as const;
+}
+
+function parseExecutionMessage(message: amqp.Message) {
+  const rawPayload = message.content.toString();
+  let payload: unknown;
+
+  try {
+    payload = JSON.parse(rawPayload);
+  } catch {
+    throw new MalformedExecutionMessageError("Execution message must be valid JSON");
+  }
+
+  try {
+    return executionMessageSchema.parse(payload) satisfies ExecutionMessage;
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new MalformedExecutionMessageError("Execution message payload is invalid");
+    }
+
+    throw error;
+  }
 }
 
 async function registerWorker() {
@@ -313,12 +346,13 @@ async function startConsumer() {
     }
 
     try {
-      const payload = JSON.parse(message.content.toString()) as ExecutionMessage;
+      const payload = parseExecutionMessage(message);
       await executeJob(payload.executionId);
       channel.ack(message);
     } catch (error) {
       console.error("worker failed to process execution message", error);
-      channel.nack(message, false, true);
+      const shouldRequeue = !(error instanceof MalformedExecutionMessageError);
+      channel.nack(message, false, shouldRequeue);
     }
   });
   consumerTag = consumer.consumerTag;
