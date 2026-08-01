@@ -42,6 +42,17 @@ export type JobSchedule = {
 export type JobRow = {
   id: string;
   name: string;
+  type?: string;
+  method?: string;
+  url?: string;
+  headers?: Record<string, string> | null;
+  body?: unknown;
+  runAt?: string | null;
+  maxAttempts?: number;
+  backoffType?: string;
+  retryInitialDelayMs?: number;
+  retryMaxDelayMs?: number;
+  timeoutMs?: number;
   status: string;
   createdAt: string;
   schedule?: JobSchedule | null;

@@ -7,7 +7,7 @@ export function DataPanel(props: {
   title: string;
   rows: DataPanelRow[];
   emptyText: string;
-  onJobAction?: (jobId: string, action: "run" | "pause" | "resume") => void;
+  onJobAction?: (jobId: string, action: "run" | "pause" | "resume" | "edit" | "delete") => void;
   onExecutionAction?: (executionId: string, action: "cancel") => void;
   expandableAttempts?: boolean;
 }) {
@@ -60,8 +60,10 @@ export function DataPanel(props: {
                             {props.onJobAction && (
                               <>
                                 <button onClick={() => props.onJobAction?.(item.id, "run")}>Run</button>
+                                <button onClick={() => props.onJobAction?.(item.id, "edit")}>Edit</button>
                                 <button onClick={() => props.onJobAction?.(item.id, "pause")}>Pause</button>
                                 <button onClick={() => props.onJobAction?.(item.id, "resume")}>Resume</button>
+                                <button onClick={() => props.onJobAction?.(item.id, "delete")}>Delete</button>
                               </>
                             )}
                             {props.onExecutionAction && <button onClick={() => props.onExecutionAction?.(item.id, "cancel")}>Cancel</button>}

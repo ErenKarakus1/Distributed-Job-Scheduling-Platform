@@ -304,6 +304,12 @@ textarea {
   font-weight: 700;
 }
 
+.job-form .secondary-button {
+  border: 1px solid #cbd5e1;
+  color: #172033;
+  background: #ffffff;
+}
+
 .api-key-form {
   display: grid;
   grid-template-columns: minmax(220px, 420px) 120px;

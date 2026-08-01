@@ -1,6 +1,6 @@
 import React from "react";
 import { createApiClient } from "./api.js";
-import { AUTH_TOKEN_STORAGE_KEY, createDefaultAuditFilters, createDefaultJobForm, createEmptyAuthForm, DEFAULT_PAGE_STATE } from "./dashboard-state.js";
+import { AUTH_TOKEN_STORAGE_KEY, createDefaultAuditFilters, createDefaultJobForm, createEmptyAuthForm, createJobFormFromRow, DEFAULT_PAGE_STATE } from "./dashboard-state.js";
 import { createAuditParams, createJobRequestBody, createPageParams } from "./dashboard-requests.js";
 import { AuthStrip, type DashboardView, Sidebar, Toolbar } from "./shell.js";
 import type { ApiKeyRow, AuditEvent, AuthResponse, AuthUser, CreatedApiKey, ExecutionRow, JobRow, MetricsOverview, NewJobFormState, PageResponse, ServiceHealthMap, WorkerRow } from "./types.js";
@@ -14,6 +14,7 @@ export function App() {
   const [authMode, setAuthMode] = React.useState<"login" | "register">("login");
   const [authForm, setAuthForm] = React.useState(createEmptyAuthForm);
   const [newJob, setNewJob] = React.useState<NewJobFormState>(createDefaultJobForm);
+  const [editingJobId, setEditingJobId] = React.useState<string | null>(null);
   const [jobs, setJobs] = React.useState<JobRow[]>([]);
   const [executions, setExecutions] = React.useState<ExecutionRow[]>([]);
   const [jobPage, setJobPage] = React.useState(DEFAULT_PAGE_STATE);
@@ -140,27 +141,54 @@ export function App() {
     event.preventDefault();
 
     try {
-      setMessage("Creating job");
-
-      await request("/api/jobs", {
-        method: "POST",
+      setMessage(editingJobId ? "Updating job" : "Creating job");
+      await request(editingJobId ? `/api/jobs/${editingJobId}` : "/api/jobs", {
+        method: editingJobId ? "PATCH" : "POST",
         body: JSON.stringify(createJobRequestBody(newJob)),
       });
-      setNewJob((current) => ({ ...current, name: "", url: "", body: "" }));
+      setNewJob(createDefaultJobForm());
+      setEditingJobId(null);
       await refreshJobs();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Create job failed");
+      setMessage(error instanceof Error ? error.message : editingJobId ? "Update job failed" : "Create job failed");
     }
   }
 
-  async function runJobAction(jobId: string, action: "run" | "pause" | "resume") {
+  async function runJobAction(jobId: string, action: "run" | "pause" | "resume" | "edit" | "delete") {
+    if (action === "edit") {
+      const job = jobs.find((row) => row.id === jobId);
+      if (!job) {
+        setMessage("Job is not loaded");
+        return;
+      }
+
+      setEditingJobId(jobId);
+      setNewJob(createJobFormFromRow(job));
+      setMessage(`Editing ${job.name}`);
+      return;
+    }
+
     try {
       setMessage(`${action} job`);
-      await request(`/api/jobs/${jobId}/${action}`, { method: "POST" });
+      if (action === "delete") {
+        await request(`/api/jobs/${jobId}`, { method: "DELETE" });
+      } else {
+        await request(`/api/jobs/${jobId}/${action}`, { method: "POST" });
+      }
+      if (editingJobId === jobId) {
+        setEditingJobId(null);
+        setNewJob(createDefaultJobForm());
+      }
       await refreshJobs();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : `${action} failed`);
     }
+  }
+
+  function cancelJobEdit() {
+    setEditingJobId(null);
+    setNewJob(createDefaultJobForm());
+    setMessage("Canceled job edit");
   }
 
   async function runExecutionAction(executionId: string, action: "cancel") {
@@ -279,6 +307,7 @@ export function App() {
           auditEvents={auditEvents}
           auditFilters={auditFilters}
           createdApiKey={createdApiKey}
+          editingJobId={editingJobId}
           executionPage={executionPage}
           executionStatusFilter={executionStatusFilter}
           executions={executions}
@@ -295,6 +324,7 @@ export function App() {
           onApiKeyNameChange={setApiKeyName}
           onCreateApiKey={(event) => void createApiKey(event)}
           onCreateJob={(event) => void createJob(event)}
+          onCancelJobEdit={cancelJobEdit}
           onExecutionAction={runExecutionAction}
           onExecutionPageChange={setExecutionPage}
           onExecutionStatusFilterChange={setExecutionStatusFilter}

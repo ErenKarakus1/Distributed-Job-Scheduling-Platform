@@ -23,6 +23,8 @@ export function ApiKeyCreateForm(props: ApiKeyCreateFormProps) {
 
 type JobCreateFormProps = {
   job: NewJobFormState;
+  mode?: "create" | "edit";
+  onCancel?: () => void;
   onChange: (job: NewJobFormState) => void;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
 };
@@ -32,7 +34,7 @@ export function JobCreateForm(props: JobCreateFormProps) {
 
   return (
     <section className="panel create-panel">
-      <h2>Create Job</h2>
+      <h2>{props.mode === "edit" ? "Edit Job" : "Create Job"}</h2>
       <form className="job-form" onSubmit={props.onSubmit}>
         <label>
           Name
@@ -125,7 +127,12 @@ export function JobCreateForm(props: JobCreateFormProps) {
           Timeout
           <input type="number" min="100" max="300000" value={job.timeoutMs} onChange={(event) => onChange({ ...job, timeoutMs: Number(event.target.value) })} required />
         </label>
-        <button type="submit">Create</button>
+        <button type="submit">{props.mode === "edit" ? "Save" : "Create"}</button>
+        {props.mode === "edit" && props.onCancel && (
+          <button className="secondary-button" type="button" onClick={props.onCancel}>
+            Cancel
+          </button>
+        )}
       </form>
     </section>
   );

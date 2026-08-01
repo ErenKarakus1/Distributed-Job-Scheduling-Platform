@@ -19,6 +19,7 @@ type DashboardViewsProps = {
   jobs: JobRow[];
   metrics: MetricsOverview;
   newJob: NewJobFormState;
+  editingJobId: string | null;
   users: AuthUser[];
   workerPage: PageState;
   workers: WorkerRow[];
@@ -29,7 +30,8 @@ type DashboardViewsProps = {
   onExecutionAction: (executionId: string, action: "cancel") => void;
   onExecutionPageChange: (page: PageState) => void;
   onExecutionStatusFilterChange: (status: string) => void;
-  onJobAction: (jobId: string, action: "run" | "pause" | "resume") => void;
+  onCancelJobEdit: () => void;
+  onJobAction: (jobId: string, action: "run" | "pause" | "resume" | "edit" | "delete") => void;
   onJobChange: (job: NewJobFormState) => void;
   onJobPageChange: (page: PageState) => void;
   onJobStatusFilterChange: (status: string) => void;
@@ -50,7 +52,7 @@ export function DashboardViews(props: DashboardViewsProps) {
   if (props.activeView === "jobs") {
     return (
       <>
-        <JobCreateForm job={props.newJob} onChange={props.onJobChange} onSubmit={props.onCreateJob} />
+        <JobCreateForm job={props.newJob} mode={props.editingJobId ? "edit" : "create"} onCancel={props.onCancelJobEdit} onChange={props.onJobChange} onSubmit={props.onCreateJob} />
         <FilterBar
           label="Job status"
           value={props.jobStatusFilter}
