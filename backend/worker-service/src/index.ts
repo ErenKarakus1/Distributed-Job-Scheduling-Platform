@@ -1,11 +1,11 @@
 import express from "express";
 import amqp from "amqplib";
-import axios, { AxiosError } from "axios";
 import { PrismaClient } from "@prisma/client";
 import { randomUUID } from "node:crypto";
-import { calculateBackoffDelayMs, getAttemptStatus, getAxiosErrorMessage } from "./execution.js";
 import { requestIdMiddleware, requestLogger } from "./http.js";
-import { MalformedExecutionMessageError, normalizeHeaders, parseExecutionMessageContent, previewResponseBody } from "./message.js";
+import { MalformedExecutionMessageError, parseExecutionMessageContent } from "./message.js";
+import { registerWorkerRoutes } from "./routes.js";
+import { createWorkerRuntime } from "./worker.js";
 
 const app = express();
 const port = Number(process.env.WORKER_SERVICE_PORT ?? 3004);
@@ -20,12 +20,11 @@ const responsePreviewLimit = Number(process.env.WORKER_RESPONSE_PREVIEW_LIMIT ??
 const parsedWorkerConcurrency = Number(process.env.WORKER_CONCURRENCY ?? 1);
 const workerConcurrency = Number.isFinite(parsedWorkerConcurrency) ? Math.max(1, Math.min(parsedWorkerConcurrency, 50)) : 1;
 
-let workerId: string | undefined;
 let heartbeatInterval: NodeJS.Timeout | undefined;
 let rabbitConnection: amqp.ChannelModel | undefined;
 let rabbitChannel: amqp.Channel | undefined;
 let consumerTag: string | undefined;
-const activeExecutions = new Set<string>();
+const workerRuntime = createWorkerRuntime({ prisma, serviceInstanceId, responsePreviewLimit });
 
 app.use(requestIdMiddleware);
 app.use(requestLogger("worker-service"));
@@ -35,224 +34,8 @@ function parseExecutionMessage(message: amqp.Message) {
   return parseExecutionMessageContent(message.content.toString());
 }
 
-async function registerWorker() {
-  const worker = await prisma.worker.upsert({
-    where: { serviceInstanceId },
-    create: {
-      serviceInstanceId,
-      status: "IDLE",
-      lastHeartbeatAt: new Date(),
-    },
-    update: {
-      status: "IDLE",
-      lastHeartbeatAt: new Date(),
-      currentExecutionId: null,
-      activeExecutionCount: 0,
-    },
-  });
-
-  workerId = worker.id;
-  return worker;
-}
-
-async function heartbeatWorker() {
-  if (!workerId) {
-    return;
-  }
-
-  await prisma.worker.update({
-    where: { id: workerId },
-    data: {
-      lastHeartbeatAt: new Date(),
-      activeExecutionCount: activeExecutions.size,
-      status: activeExecutions.size > 0 ? "BUSY" : "IDLE",
-    },
-  });
-}
-
-async function markWorkerBusy(executionId: string) {
-  if (!workerId) {
-    throw new Error("Worker is not registered");
-  }
-
-  activeExecutions.add(executionId);
-
-  await prisma.worker.update({
-    where: { id: workerId },
-    data: {
-      status: "BUSY",
-      currentExecutionId: executionId,
-      activeExecutionCount: activeExecutions.size,
-      lastHeartbeatAt: new Date(),
-    },
-  });
-}
-
-async function completeWorkerExecution(executionId: string) {
-  if (!workerId) {
-    return;
-  }
-
-  activeExecutions.delete(executionId);
-  const nextExecutionId = activeExecutions.values().next().value as string | undefined;
-
-  await prisma.worker.update({
-    where: { id: workerId },
-    data: {
-      status: activeExecutions.size > 0 ? "BUSY" : "IDLE",
-      currentExecutionId: nextExecutionId ?? null,
-      activeExecutionCount: activeExecutions.size,
-      lastHeartbeatAt: new Date(),
-    },
-  });
-}
-
-async function executeJob(executionId: string) {
-  if (!workerId) {
-    throw new Error("Worker is not registered");
-  }
-
-  const execution = await prisma.execution.findUnique({
-    where: { id: executionId },
-    include: { job: true },
-  });
-
-  if (!execution) {
-    console.warn(`execution ${executionId} was not found`);
-    return;
-  }
-
-  if (execution.status === "CANCELED" || execution.status === "SUCCEEDED" || execution.status === "FAILED") {
-    console.warn(`execution ${executionId} is already terminal with status ${execution.status}`);
-    return;
-  }
-
-  const startedAt = new Date();
-  await markWorkerBusy(executionId);
-
-  const claimed = await prisma.execution.updateMany({
-    where: {
-      id: executionId,
-      status: { in: ["PENDING", "QUEUED", "RETRY_SCHEDULED", "STALLED"] },
-    },
-    data: {
-      status: "RUNNING",
-      lockedByWorkerId: workerId,
-      startedAt,
-      lastHeartbeatAt: startedAt,
-    },
-  });
-
-  if (claimed.count === 0) {
-    console.warn(`execution ${executionId} could not be claimed`);
-    await completeWorkerExecution(executionId);
-    return;
-  }
-
-  try {
-    const response = await axios.request({
-      method: execution.job.method,
-      url: execution.job.url,
-      headers: normalizeHeaders(execution.job.headers),
-      data: execution.job.body ?? undefined,
-      timeout: execution.job.timeoutMs,
-      validateStatus: () => true,
-    });
-
-    const finishedAt = new Date();
-    const succeeded = response.status >= 200 && response.status < 300;
-
-    await recordAttempt({
-      executionId,
-      status: succeeded ? "SUCCEEDED" : "FAILED",
-      httpStatusCode: response.status,
-      responseBodyPreview: previewResponseBody(response.data, responsePreviewLimit),
-      startedAt,
-      finishedAt,
-    });
-  } catch (error) {
-    const finishedAt = new Date();
-    const axiosError = error as AxiosError;
-
-    await recordAttempt({
-      executionId,
-      status: getAttemptStatus(error),
-      httpStatusCode: axiosError.response?.status,
-      responseBodyPreview: previewResponseBody(axiosError.response?.data, responsePreviewLimit),
-      errorMessage: getAxiosErrorMessage(error),
-      startedAt,
-      finishedAt,
-    });
-  } finally {
-    await completeWorkerExecution(executionId);
-  }
-}
-
-async function recordAttempt(input: {
-  executionId: string;
-  status: "SUCCEEDED" | "FAILED" | "TIMED_OUT";
-  httpStatusCode?: number;
-  responseBodyPreview?: string;
-  errorMessage?: string;
-  startedAt: Date;
-  finishedAt: Date;
-}) {
-  if (!workerId) {
-    throw new Error("Worker is not registered");
-  }
-
-  await prisma.$transaction(async (tx) => {
-    const execution = await tx.execution.findUnique({
-      where: { id: input.executionId },
-      include: { job: true },
-    });
-
-    if (!execution) {
-      throw new Error(`Execution ${input.executionId} not found`);
-    }
-
-    if (execution.status === "CANCELED") {
-      return;
-    }
-
-    const attemptNumber = execution.attemptCount + 1;
-    const retryable = input.status !== "SUCCEEDED" && attemptNumber < execution.job.maxAttempts;
-    const nextAttemptAt = retryable ? new Date(input.finishedAt.getTime() + calculateBackoffDelayMs(execution.job, attemptNumber + 1)) : null;
-
-    await tx.executionAttempt.create({
-      data: {
-        executionId: input.executionId,
-        attemptNumber,
-        workerId,
-        status: input.status,
-        httpStatusCode: input.httpStatusCode,
-        responseBodyPreview: input.responseBodyPreview,
-        errorMessage: input.errorMessage,
-        startedAt: input.startedAt,
-        finishedAt: input.finishedAt,
-        durationMs: input.finishedAt.getTime() - input.startedAt.getTime(),
-      },
-    });
-
-    await tx.execution.updateMany({
-      where: {
-        id: input.executionId,
-        status: "RUNNING",
-        lockedByWorkerId: workerId,
-      },
-      data: {
-        attemptCount: attemptNumber,
-        status: input.status === "SUCCEEDED" ? "SUCCEEDED" : retryable ? "RETRY_SCHEDULED" : "FAILED",
-        nextAttemptAt,
-        lockedByWorkerId: null,
-        finishedAt: input.status === "SUCCEEDED" || !retryable ? input.finishedAt : null,
-      },
-    });
-  });
-}
-
 async function startConsumer() {
-  await registerWorker();
+  await workerRuntime.registerWorker();
 
   const connection = await amqp.connect(rabbitmqUrl);
   const channel = await connection.createChannel();
@@ -275,7 +58,7 @@ async function startConsumer() {
 
     try {
       const payload = parseExecutionMessage(message);
-      await executeJob(payload.executionId);
+      await workerRuntime.executeJob(payload.executionId);
       channel.ack(message);
     } catch (error) {
       console.error("worker failed to process execution message", error);
@@ -286,7 +69,7 @@ async function startConsumer() {
   consumerTag = consumer.consumerTag;
 
   heartbeatInterval = setInterval(() => {
-    heartbeatWorker().catch((error: unknown) => {
+    workerRuntime.heartbeatWorker().catch((error: unknown) => {
       console.error("worker heartbeat failed", error);
     });
   }, heartbeatIntervalMs);
@@ -294,15 +77,10 @@ async function startConsumer() {
   console.log(`worker ${serviceInstanceId} consuming ${readyQueueName} with concurrency ${workerConcurrency}`);
 }
 
-app.get("/health", (_req, res) => {
-  res.json({
-    service: "worker-service",
-    status: "ok",
-    workerId,
-    serviceInstanceId,
-    workerConcurrency,
-    activeExecutionCount: activeExecutions.size,
-  });
+registerWorkerRoutes(app, {
+  serviceInstanceId,
+  workerConcurrency,
+  getWorkerState: workerRuntime.getWorkerState,
 });
 
 const server = app.listen(port, () => {
@@ -325,12 +103,7 @@ async function shutdown(signal: string) {
     }
     await rabbitChannel?.close();
     await rabbitConnection?.close();
-    if (workerId) {
-      await prisma.worker.update({
-        where: { id: workerId },
-        data: { status: "OFFLINE", currentExecutionId: null, activeExecutionCount: 0, lastHeartbeatAt: new Date() },
-      });
-    }
+    await workerRuntime.markWorkerOffline();
     await prisma.$disconnect();
     process.exit(0);
   });
