@@ -24,6 +24,7 @@ function App() {
   const [executions, setExecutions] = React.useState<unknown[]>([]);
   const [jobPage, setJobPage] = React.useState({ limit: 25, offset: 0, total: 0 });
   const [executionPage, setExecutionPage] = React.useState({ limit: 25, offset: 0, total: 0 });
+  const [workerPage, setWorkerPage] = React.useState({ limit: 25, offset: 0, total: 0 });
   const [jobStatusFilter, setJobStatusFilter] = React.useState("");
   const [executionStatusFilter, setExecutionStatusFilter] = React.useState("");
   const [workers, setWorkers] = React.useState<unknown[]>([]);
@@ -86,10 +87,15 @@ function App() {
     setMessage(`Loaded ${body.data.length} execution(s)`);
   }
 
-  async function refreshWorkers() {
+  async function refreshWorkers(page = workerPage) {
     setMessage("Loading workers");
-    const body = await request<{ data: unknown[] }>("/api/workers");
+    const params = new URLSearchParams({
+      limit: String(page.limit),
+      offset: String(page.offset),
+    });
+    const body = await request<{ data: unknown[]; page: { limit: number; offset: number; total: number } }>(`/api/workers?${params}`);
     setWorkers(body.data);
+    setWorkerPage(body.page);
     setMessage(`Loaded ${body.data.length} worker(s)`);
   }
 
@@ -366,7 +372,10 @@ function App() {
         )}
 
         {activeView === "workers" && (
-          <DataPanel title="Workers" rows={workers} emptyText="No workers loaded" />
+          <>
+            <DataPanel title="Workers" rows={workers} emptyText="No workers loaded" />
+            <Pager page={workerPage} onChange={setWorkerPage} onApply={(page) => void refreshWorkers(page)} />
+          </>
         )}
 
         {activeView === "health" && (

@@ -248,14 +248,19 @@ app.get("/executions/:id", async (req, res, next) => {
   }
 });
 
-app.get("/workers", async (_req, res, next) => {
+app.get("/workers", async (req, res, next) => {
   try {
-    const workers = await prisma.worker.findMany({
-      orderBy: { lastHeartbeatAt: "desc" },
-      take: 100,
-    });
+    const pagination = paginationSchema.parse(req.query);
+    const [workers, total] = await Promise.all([
+      prisma.worker.findMany({
+        orderBy: { lastHeartbeatAt: "desc" },
+        take: pagination.limit,
+        skip: pagination.offset,
+      }),
+      prisma.worker.count(),
+    ]);
 
-    res.json({ data: workers });
+    res.json({ data: workers, page: { ...pagination, total } });
   } catch (error) {
     next(error);
   }
