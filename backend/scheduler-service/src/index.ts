@@ -3,14 +3,22 @@ import amqp from "amqplib";
 import { CronExpressionParser } from "cron-parser";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { z } from "zod";
+import { Redis } from "ioredis";
+import { randomUUID } from "node:crypto";
 
 const app = express();
 const port = Number(process.env.SCHEDULER_SERVICE_PORT ?? 3003);
 const prisma = new PrismaClient();
+const redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", {
+  lazyConnect: true,
+  maxRetriesPerRequest: 3,
+});
 const rabbitmqUrl = process.env.RABBITMQ_URL ?? "amqp://scheduler:scheduler@localhost:5672";
 const readyQueueName = process.env.EXECUTION_READY_QUEUE ?? "execution.ready";
 const pollIntervalMs = Number(process.env.SCHEDULER_POLL_INTERVAL_MS ?? 5000);
 const batchSize = Number(process.env.SCHEDULER_BATCH_SIZE ?? 50);
+const schedulerLockKey = process.env.SCHEDULER_LOCK_KEY ?? "scheduler:run-lock";
+const schedulerLockTtlMs = Number(process.env.SCHEDULER_LOCK_TTL_MS ?? 30000);
 
 app.use(express.json());
 
@@ -45,6 +53,40 @@ function getChannel() {
   });
 
   return channelPromise;
+}
+
+async function acquireSchedulerLock() {
+  if (redis.status === "wait") {
+    await redis.connect();
+  }
+
+  const token = randomUUID();
+  const acquired = await redis.set(schedulerLockKey, token, "PX", schedulerLockTtlMs, "NX");
+
+  return acquired === "OK" ? token : undefined;
+}
+
+async function releaseSchedulerLock(token: string) {
+  const currentToken = await redis.get(schedulerLockKey);
+
+  if (currentToken === token) {
+    await redis.del(schedulerLockKey);
+  }
+}
+
+async function runSchedulerOnceWithLock(now = new Date()) {
+  const lockToken = await acquireSchedulerLock();
+
+  if (!lockToken) {
+    return { acquired: false as const, stats: undefined };
+  }
+
+  try {
+    const stats = await runSchedulerOnce(now);
+    return { acquired: true as const, stats };
+  } finally {
+    await releaseSchedulerLock(lockToken);
+  }
 }
 
 async function publishExecution(executionId: string) {
@@ -204,7 +246,13 @@ async function runSchedulerLoop() {
   schedulerRunning = true;
 
   try {
-    const stats = await runSchedulerOnce();
+    const result = await runSchedulerOnceWithLock();
+
+    if (!result.acquired) {
+      return;
+    }
+
+    const stats = result.stats;
     const queued = stats.oneTimeQueued + stats.recurringQueued + stats.retriesQueued + stats.pendingQueued;
 
     if (queued > 0) {
@@ -224,9 +272,14 @@ app.get("/health", (_req, res) => {
 app.post("/schedule/run", async (req, res, next) => {
   try {
     const data = scheduleRunSchema.parse(req.body);
-    const stats = await runSchedulerOnce(data.now ?? new Date());
+    const result = await runSchedulerOnceWithLock(data.now ?? new Date());
 
-    res.json(stats);
+    if (!result.acquired) {
+      res.status(409).json({ error: "Scheduler lock is already held" });
+      return;
+    }
+
+    res.json(result.stats);
   } catch (error) {
     if (error instanceof z.ZodError) {
       res.status(400).json({ error: "Validation failed", issues: error.issues });
