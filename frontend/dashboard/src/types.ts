@@ -10,6 +10,17 @@ export type AuthResponse = {
   token: string;
 };
 
+export type ApiKeyRow = {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt?: string;
+};
+
+export type CreatedApiKey = ApiKeyRow & {
+  apiKey: string;
+};
+
 export type AuditEvent = {
   id: string;
   actorType: string;

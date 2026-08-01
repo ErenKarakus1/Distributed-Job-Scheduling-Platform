@@ -1,5 +1,26 @@
 import type { AuditFilters, NewJobFormState } from "./types.js";
 
+type ApiKeyCreateFormProps = {
+  name: string;
+  onChange: (name: string) => void;
+  onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+};
+
+export function ApiKeyCreateForm(props: ApiKeyCreateFormProps) {
+  return (
+    <section className="panel compact-panel">
+      <h2>Create API Key</h2>
+      <form className="api-key-form" onSubmit={props.onSubmit}>
+        <label>
+          Name
+          <input value={props.name} onChange={(event) => props.onChange(event.target.value)} required />
+        </label>
+        <button type="submit">Create</button>
+      </form>
+    </section>
+  );
+}
+
 type JobCreateFormProps = {
   job: NewJobFormState;
   onChange: (job: NewJobFormState) => void;

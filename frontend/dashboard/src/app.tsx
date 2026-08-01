@@ -3,7 +3,7 @@ import { createApiClient } from "./api.js";
 import { AUTH_TOKEN_STORAGE_KEY, createDefaultAuditFilters, createDefaultJobForm, createEmptyAuthForm, DEFAULT_PAGE_STATE } from "./dashboard-state.js";
 import { createAuditParams, createJobRequestBody, createPageParams } from "./dashboard-requests.js";
 import { AuthStrip, type DashboardView, Sidebar, Toolbar } from "./shell.js";
-import type { AuditEvent, AuthResponse, AuthUser, ExecutionRow, JobRow, MetricsOverview, NewJobFormState, PageResponse, ServiceHealthMap, WorkerRow } from "./types.js";
+import type { ApiKeyRow, AuditEvent, AuthResponse, AuthUser, CreatedApiKey, ExecutionRow, JobRow, MetricsOverview, NewJobFormState, PageResponse, ServiceHealthMap, WorkerRow } from "./types.js";
 import { DashboardViews } from "./views.js";
 
 export function App() {
@@ -23,6 +23,9 @@ export function App() {
   const [executionStatusFilter, setExecutionStatusFilter] = React.useState("");
   const [workers, setWorkers] = React.useState<WorkerRow[]>([]);
   const [users, setUsers] = React.useState<AuthUser[]>([]);
+  const [apiKeys, setApiKeys] = React.useState<ApiKeyRow[]>([]);
+  const [apiKeyName, setApiKeyName] = React.useState("");
+  const [createdApiKey, setCreatedApiKey] = React.useState<CreatedApiKey | null>(null);
   const [auditEvents, setAuditEvents] = React.useState<AuditEvent[]>([]);
   const [auditFilters, setAuditFilters] = React.useState(createDefaultAuditFilters);
   const [metrics, setMetrics] = React.useState<MetricsOverview>({});
@@ -95,6 +98,13 @@ export function App() {
     setMessage(`Loaded ${body.data.length} user(s)`);
   }
 
+  async function refreshApiKeys() {
+    setMessage("Loading API keys");
+    const body = await authRequest<{ data: ApiKeyRow[] }>("/internal/api-keys");
+    setApiKeys(body.data);
+    setMessage(`Loaded ${body.data.length} API key(s)`);
+  }
+
   async function refreshAuditEvents() {
     setMessage("Loading audit events");
     const params = createAuditParams(auditFilters);
@@ -118,6 +128,7 @@ export function App() {
       if (activeView === "executions") await refreshExecutions();
       if (activeView === "workers") await refreshWorkers();
       if (activeView === "users") await refreshUsers();
+      if (activeView === "apiKeys") await refreshApiKeys();
       if (activeView === "audit") await refreshAuditEvents();
       if (activeView === "health") await refreshHealth();
     } catch (error) {
@@ -190,6 +201,38 @@ export function App() {
     }
   }
 
+  async function createApiKey(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    try {
+      setMessage("Creating API key");
+      const body = await authRequest<CreatedApiKey>("/internal/api-keys", {
+        method: "POST",
+        body: JSON.stringify({ name: apiKeyName }),
+      });
+      setCreatedApiKey(body);
+      setApiKeyName("");
+      await refreshApiKeys();
+      setMessage("Created API key");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "API key creation failed");
+    }
+  }
+
+  async function revokeApiKey(apiKeyId: string) {
+    try {
+      setMessage("Revoking API key");
+      await authRequest(`/internal/api-keys/${apiKeyId}`, { method: "DELETE" });
+      if (createdApiKey?.id === apiKeyId) {
+        setCreatedApiKey(null);
+      }
+      await refreshApiKeys();
+      setMessage("Revoked API key");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "API key revoke failed");
+    }
+  }
+
   function signOut() {
     localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
     setAuthToken("");
@@ -231,8 +274,11 @@ export function App() {
 
         <DashboardViews
           activeView={activeView}
+          apiKeyName={apiKeyName}
+          apiKeys={apiKeys}
           auditEvents={auditEvents}
           auditFilters={auditFilters}
+          createdApiKey={createdApiKey}
           executionPage={executionPage}
           executionStatusFilter={executionStatusFilter}
           executions={executions}
@@ -246,6 +292,8 @@ export function App() {
           workerPage={workerPage}
           workers={workers}
           onAuditFiltersChange={setAuditFilters}
+          onApiKeyNameChange={setApiKeyName}
+          onCreateApiKey={(event) => void createApiKey(event)}
           onCreateJob={(event) => void createJob(event)}
           onExecutionAction={runExecutionAction}
           onExecutionPageChange={setExecutionPage}
@@ -259,6 +307,7 @@ export function App() {
           onRefreshJobs={(page) => void refreshJobs(page)}
           onRefreshWorkers={(page) => void refreshWorkers(page)}
           onUserRoleChange={updateUserRole}
+          onRevokeApiKey={revokeApiKey}
           onWorkerPageChange={setWorkerPage}
         />
       </section>

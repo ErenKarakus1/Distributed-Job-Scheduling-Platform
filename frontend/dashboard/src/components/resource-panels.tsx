@@ -1,4 +1,4 @@
-import type { AuditEvent, AuthUser, WorkerRow } from "../types.js";
+import type { ApiKeyRow, AuditEvent, AuthUser, CreatedApiKey, WorkerRow } from "../types.js";
 
 export function WorkerPanel(props: { rows: WorkerRow[] }) {
   return (
@@ -69,6 +69,52 @@ export function UserPanel(props: { rows: AuthUser[]; onRoleChange: (userId: stri
                     </select>
                   </td>
                   <td>{user.id}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+export function ApiKeyPanel(props: { rows: ApiKeyRow[]; createdKey: CreatedApiKey | null; onRevoke: (apiKeyId: string) => void }) {
+  return (
+    <section className="panel">
+      <h2>API Keys</h2>
+      {props.createdKey && (
+        <div className="secret-box">
+          <span>{props.createdKey.name}</span>
+          <code>{props.createdKey.apiKey}</code>
+        </div>
+      )}
+      {props.rows.length === 0 ? (
+        <p className="empty-state">No API keys loaded</p>
+      ) : (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Created</th>
+                <th>Updated</th>
+                <th>ID</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {props.rows.map((apiKey) => (
+                <tr key={apiKey.id}>
+                  <td>{apiKey.name}</td>
+                  <td>{apiKey.createdAt}</td>
+                  <td>{apiKey.updatedAt ?? "-"}</td>
+                  <td>{apiKey.id}</td>
+                  <td>
+                    <div className="row-actions">
+                      <button onClick={() => props.onRevoke(apiKey.id)}>Revoke</button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>

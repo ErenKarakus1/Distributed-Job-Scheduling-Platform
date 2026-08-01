@@ -1,6 +1,6 @@
 import type { AuthUser } from "./types.js";
 
-export type DashboardView = "overview" | "jobs" | "executions" | "workers" | "users" | "audit" | "health";
+export type DashboardView = "overview" | "jobs" | "executions" | "workers" | "users" | "apiKeys" | "audit" | "health";
 
 type SidebarProps = {
   activeView: DashboardView;
@@ -13,6 +13,7 @@ const views: Array<{ id: DashboardView; label: string }> = [
   { id: "executions", label: "Executions" },
   { id: "workers", label: "Workers" },
   { id: "users", label: "Users" },
+  { id: "apiKeys", label: "API Keys" },
   { id: "audit", label: "Audit" },
   { id: "health", label: "Health" },
 ];

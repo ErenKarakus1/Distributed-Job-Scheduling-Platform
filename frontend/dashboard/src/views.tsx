@@ -1,12 +1,15 @@
-import { AuditPanel, DataPanel, FilterBar, OverviewPanel, Pager, UserPanel, WorkerPanel } from "./components.js";
-import { AuditFilterBar, JobCreateForm } from "./forms.js";
+import { ApiKeyPanel, AuditPanel, DataPanel, FilterBar, OverviewPanel, Pager, UserPanel, WorkerPanel } from "./components.js";
+import { ApiKeyCreateForm, AuditFilterBar, JobCreateForm } from "./forms.js";
 import type { DashboardView } from "./shell.js";
-import type { AuditEvent, AuditFilters, AuthUser, ExecutionRow, JobRow, MetricsOverview, NewJobFormState, PageState, ServiceHealthMap, WorkerRow } from "./types.js";
+import type { ApiKeyRow, AuditEvent, AuditFilters, AuthUser, CreatedApiKey, ExecutionRow, JobRow, MetricsOverview, NewJobFormState, PageState, ServiceHealthMap, WorkerRow } from "./types.js";
 
 type DashboardViewsProps = {
   activeView: DashboardView;
   auditEvents: AuditEvent[];
   auditFilters: AuditFilters;
+  apiKeyName: string;
+  apiKeys: ApiKeyRow[];
+  createdApiKey: CreatedApiKey | null;
   executionPage: PageState;
   executionStatusFilter: string;
   executions: ExecutionRow[];
@@ -20,7 +23,9 @@ type DashboardViewsProps = {
   workerPage: PageState;
   workers: WorkerRow[];
   onAuditFiltersChange: (filters: AuditFilters) => void;
+  onApiKeyNameChange: (name: string) => void;
   onCreateJob: (event: React.FormEvent<HTMLFormElement>) => void;
+  onCreateApiKey: (event: React.FormEvent<HTMLFormElement>) => void;
   onExecutionAction: (executionId: string, action: "cancel") => void;
   onExecutionPageChange: (page: PageState) => void;
   onExecutionStatusFilterChange: (status: string) => void;
@@ -32,6 +37,7 @@ type DashboardViewsProps = {
   onRefreshExecutions: (page?: PageState) => void;
   onRefreshJobs: (page?: PageState) => void;
   onRefreshWorkers: (page?: PageState) => void;
+  onRevokeApiKey: (apiKeyId: string) => void;
   onUserRoleChange: (userId: string, role: "ADMIN" | "VIEWER") => void;
   onWorkerPageChange: (page: PageState) => void;
 };
@@ -93,6 +99,15 @@ export function DashboardViews(props: DashboardViewsProps) {
 
   if (props.activeView === "users") {
     return <UserPanel rows={props.users} onRoleChange={props.onUserRoleChange} />;
+  }
+
+  if (props.activeView === "apiKeys") {
+    return (
+      <>
+        <ApiKeyCreateForm name={props.apiKeyName} onChange={props.onApiKeyNameChange} onSubmit={props.onCreateApiKey} />
+        <ApiKeyPanel rows={props.apiKeys} createdKey={props.createdApiKey} onRevoke={props.onRevokeApiKey} />
+      </>
+    );
   }
 
   if (props.activeView === "audit") {
