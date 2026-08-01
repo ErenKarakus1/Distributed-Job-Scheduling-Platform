@@ -1,4 +1,5 @@
 import express from "express";
+import cors from "cors";
 import axios, { AxiosError, Method } from "axios";
 import { PrismaClient } from "@prisma/client";
 import { createHash, randomBytes } from "node:crypto";
@@ -11,7 +12,25 @@ const jobServiceUrl = process.env.JOB_SERVICE_URL ?? "http://localhost:3001";
 const executionServiceUrl = process.env.EXECUTION_SERVICE_URL ?? "http://localhost:3002";
 const schedulerServiceUrl = process.env.SCHEDULER_SERVICE_URL ?? "http://localhost:3003";
 const workerServiceUrl = process.env.WORKER_SERVICE_URL ?? "http://localhost:3004";
+const allowedOrigins = (process.env.CORS_ORIGINS ?? "http://localhost:5173,http://127.0.0.1:5173")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error("Origin is not allowed by CORS"));
+    },
+    allowedHeaders: ["content-type", "x-api-key"],
+    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+  }),
+);
 app.use(express.json());
 
 const createApiKeySchema = z.object({
