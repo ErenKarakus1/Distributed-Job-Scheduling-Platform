@@ -1,10 +1,10 @@
 import express from "express";
 import amqp from "amqplib";
-import { CronExpressionParser } from "cron-parser";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import { Redis } from "ioredis";
 import { randomUUID } from "node:crypto";
+import { nextCronRun } from "./cron.js";
 
 const app = express();
 const port = Number(process.env.SCHEDULER_SERVICE_PORT ?? 3003);
@@ -141,13 +141,6 @@ async function publishExecution(executionId: string) {
     contentType: "application/json",
     deliveryMode: 2,
   });
-}
-
-function nextCronRun(cronExpression: string, timezone: string, from: Date) {
-  return CronExpressionParser.parse(cronExpression, {
-    currentDate: from,
-    tz: timezone,
-  }).next().toDate();
 }
 
 async function queueExecution(executionId: string) {
