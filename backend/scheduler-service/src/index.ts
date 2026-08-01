@@ -25,13 +25,23 @@ function requestLogger(service: string): express.RequestHandler {
     const startedAt = Date.now();
 
     res.on("finish", () => {
-      console.log(`${service} ${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - startedAt}ms`);
+      console.log(
+        `${service} requestId=${String(res.locals.requestId)} ${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - startedAt}ms`,
+      );
     });
 
     next();
   };
 }
 
+function requestIdMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const requestId = req.header("x-request-id")?.trim() || randomUUID();
+  res.locals.requestId = requestId;
+  res.setHeader("x-request-id", requestId);
+  next();
+}
+
+app.use(requestIdMiddleware);
 app.use(requestLogger("scheduler-service"));
 app.use(express.json());
 

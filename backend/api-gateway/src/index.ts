@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import axios, { AxiosError, Method } from "axios";
 import { PrismaClient } from "@prisma/client";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { z } from "zod";
 
 const app = express();
@@ -22,11 +22,20 @@ function requestLogger(service: string): express.RequestHandler {
     const startedAt = Date.now();
 
     res.on("finish", () => {
-      console.log(`${service} ${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - startedAt}ms`);
+      console.log(
+        `${service} requestId=${String(res.locals.requestId)} ${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - startedAt}ms`,
+      );
     });
 
     next();
   };
+}
+
+function requestIdMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const requestId = req.header("x-request-id")?.trim() || randomUUID();
+  res.locals.requestId = requestId;
+  res.setHeader("x-request-id", requestId);
+  next();
 }
 
 app.use(
@@ -39,10 +48,11 @@ app.use(
 
       callback(new Error("Origin is not allowed by CORS"));
     },
-    allowedHeaders: ["content-type", "x-api-key"],
+    allowedHeaders: ["content-type", "x-api-key", "x-request-id"],
     methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
   }),
 );
+app.use(requestIdMiddleware);
 app.use(requestLogger("api-gateway"));
 app.use(express.json());
 
@@ -104,6 +114,7 @@ async function forwardRequest(req: express.Request, res: express.Response, targe
       url: path,
       params: req.query,
       data: ["GET", "HEAD"].includes(req.method) ? undefined : req.body,
+      headers: { "x-request-id": String(res.locals.requestId) },
       validateStatus: () => true,
     });
 
@@ -130,6 +141,7 @@ app.get("/health/services", async (_req, res) => {
       try {
         const response = await axios.get("/health", {
           baseURL: service.baseUrl,
+          headers: { "x-request-id": String(res.locals.requestId) },
           timeout: 2000,
           validateStatus: () => true,
         });

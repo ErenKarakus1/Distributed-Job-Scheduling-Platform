@@ -1,6 +1,7 @@
 import express from "express";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { z } from "zod";
+import { randomUUID } from "node:crypto";
 
 const app = express();
 const port = Number(process.env.EXECUTION_SERVICE_PORT ?? 3002);
@@ -16,13 +17,23 @@ function requestLogger(service: string): express.RequestHandler {
     const startedAt = Date.now();
 
     res.on("finish", () => {
-      console.log(`${service} ${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - startedAt}ms`);
+      console.log(
+        `${service} requestId=${String(res.locals.requestId)} ${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - startedAt}ms`,
+      );
     });
 
     next();
   };
 }
 
+function requestIdMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const requestId = req.header("x-request-id")?.trim() || randomUUID();
+  res.locals.requestId = requestId;
+  res.setHeader("x-request-id", requestId);
+  next();
+}
+
+app.use(requestIdMiddleware);
 app.use(requestLogger("execution-service"));
 app.use(express.json());
 
