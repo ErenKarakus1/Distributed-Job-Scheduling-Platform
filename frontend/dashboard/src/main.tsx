@@ -2,9 +2,29 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
+type AuthUser = {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+};
+
+type AuthResponse = {
+  user: AuthUser;
+  token: string;
+};
+
 function App() {
   const [apiBaseUrl, setApiBaseUrl] = React.useState("http://localhost:3000");
   const [apiKey, setApiKey] = React.useState("");
+  const [authToken, setAuthToken] = React.useState(() => localStorage.getItem("scheduler.jwt") ?? "");
+  const [authUser, setAuthUser] = React.useState<AuthUser | null>(null);
+  const [authMode, setAuthMode] = React.useState<"login" | "register">("login");
+  const [authForm, setAuthForm] = React.useState({
+    email: "",
+    name: "",
+    password: "",
+  });
   const [newJob, setNewJob] = React.useState({
     name: "",
     type: "ONE_TIME",
@@ -35,6 +55,16 @@ function App() {
   const [activeView, setActiveView] = React.useState<"overview" | "jobs" | "executions" | "workers" | "health">("overview");
   const [message, setMessage] = React.useState("Ready");
 
+  React.useEffect(() => {
+    if (!authToken) {
+      setAuthUser(null);
+      return;
+    }
+
+    localStorage.setItem("scheduler.jwt", authToken);
+    void loadCurrentUser(authToken);
+  }, [authToken, apiBaseUrl]);
+
   async function request<T>(path: string, options: RequestInit = {}) {
     const response = await fetch(`${apiBaseUrl}${path}`, {
       ...options,
@@ -52,6 +82,36 @@ function App() {
     }
 
     return body;
+  }
+
+  async function authRequest<T>(path: string, options: RequestInit = {}, token = authToken) {
+    const response = await fetch(`${apiBaseUrl}${path}`, {
+      ...options,
+      headers: {
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+        ...(options.body ? { "content-type": "application/json" } : {}),
+        ...options.headers,
+      },
+    });
+
+    const body = (await response.json()) as T;
+
+    if (!response.ok) {
+      throw new Error(JSON.stringify(body));
+    }
+
+    return body;
+  }
+
+  async function loadCurrentUser(token = authToken) {
+    try {
+      const body = await authRequest<{ user: AuthUser }>("/auth/me", {}, token);
+      setAuthUser(body.user);
+    } catch {
+      localStorage.removeItem("scheduler.jwt");
+      setAuthToken("");
+      setAuthUser(null);
+    }
   }
 
   async function refreshJobs(page = jobPage) {
@@ -180,6 +240,41 @@ function App() {
     }
   }
 
+  async function submitAuth(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    try {
+      setMessage(authMode === "login" ? "Signing in" : "Creating user");
+      const body = await authRequest<AuthResponse>(
+        authMode === "login" ? "/auth/login" : "/auth/register",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            email: authForm.email,
+            name: authMode === "register" ? authForm.name : undefined,
+            password: authForm.password,
+          }),
+        },
+        "",
+      );
+
+      localStorage.setItem("scheduler.jwt", body.token);
+      setAuthToken(body.token);
+      setAuthUser(body.user);
+      setAuthForm({ email: "", name: "", password: "" });
+      setMessage(`Signed in as ${body.user.email}`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Auth request failed");
+    }
+  }
+
+  function signOut() {
+    localStorage.removeItem("scheduler.jwt");
+    setAuthToken("");
+    setAuthUser(null);
+    setMessage("Signed out");
+  }
+
   return (
     <main className="app-shell">
       <aside className="sidebar">
@@ -219,6 +314,42 @@ function App() {
           </label>
           <button onClick={() => void refreshCurrentView()}>Refresh</button>
         </header>
+
+        <section className="auth-strip">
+          {authUser ? (
+            <>
+              <span>
+                {authUser.name} · {authUser.role}
+              </span>
+              <button onClick={signOut}>Sign out</button>
+            </>
+          ) : (
+            <form className="auth-form" onSubmit={(event) => void submitAuth(event)}>
+              <select value={authMode} onChange={(event) => setAuthMode(event.target.value as "login" | "register")}>
+                <option value="login">Login</option>
+                <option value="register">Register</option>
+              </select>
+              <input
+                value={authForm.email}
+                onChange={(event) => setAuthForm({ ...authForm, email: event.target.value })}
+                placeholder="Email"
+                type="email"
+                required
+              />
+              {authMode === "register" && (
+                <input value={authForm.name} onChange={(event) => setAuthForm({ ...authForm, name: event.target.value })} placeholder="Name" required />
+              )}
+              <input
+                value={authForm.password}
+                onChange={(event) => setAuthForm({ ...authForm, password: event.target.value })}
+                placeholder="Password"
+                type="password"
+                required
+              />
+              <button type="submit">{authMode === "login" ? "Sign in" : "Create"}</button>
+            </form>
+          )}
+        </section>
 
         <div className="status-line">{message}</div>
 

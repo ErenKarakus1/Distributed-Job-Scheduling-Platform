@@ -141,6 +141,44 @@ textarea {
   font-size: 14px;
 }
 
+.auth-strip {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.auth-strip > span {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  color: #53627a;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.auth-strip button,
+.auth-form button {
+  min-height: 40px;
+  border: 0;
+  border-radius: 6px;
+  color: #ffffff;
+  background: #2364aa;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.auth-form {
+  display: grid;
+  grid-template-columns: 120px minmax(180px, 1fr) minmax(160px, 1fr) 96px;
+  gap: 10px;
+  width: min(760px, 100%);
+}
+
+.auth-form:has(input:nth-of-type(3)) {
+  grid-template-columns: 120px minmax(160px, 1fr) minmax(140px, 1fr) minmax(140px, 1fr) 96px;
+}
+
 .panel {
   width: 100%;
   padding: 18px;
@@ -379,6 +417,15 @@ pre {
   }
 
   .toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-strip {
+    justify-content: stretch;
+  }
+
+  .auth-form,
+  .auth-form:has(input:nth-of-type(3)) {
     grid-template-columns: 1fr;
   }
 
