@@ -4,6 +4,7 @@ import { createApiClient } from "./api.js";
 import { AuditPanel, DataPanel, FilterBar, OverviewPanel, Pager, UserPanel, WorkerPanel } from "./components.js";
 import { AuditFilterBar, JobCreateForm } from "./forms.js";
 import { parseOptionalJson } from "./json.js";
+import { AuthStrip, type DashboardView, Sidebar, Toolbar } from "./shell.js";
 import type { AuditEvent, AuthResponse, AuthUser, NewJobFormState } from "./types.js";
 import "./styles.css";
 
@@ -54,7 +55,7 @@ function App() {
   });
   const [metrics, setMetrics] = React.useState<Record<string, unknown>>({});
   const [health, setHealth] = React.useState<Record<string, unknown>>({});
-  const [activeView, setActiveView] = React.useState<"overview" | "jobs" | "executions" | "workers" | "users" | "audit" | "health">("overview");
+  const [activeView, setActiveView] = React.useState<DashboardView>("overview");
   const [message, setMessage] = React.useState("Ready");
   const { authRequest, request } = React.useMemo(() => createApiClient({ apiBaseUrl, apiKey, authToken }), [apiBaseUrl, apiKey, authToken]);
 
@@ -280,85 +281,20 @@ function App() {
 
   return (
     <main className="app-shell">
-      <aside className="sidebar">
-        <div>
-          <p className="eyebrow">Distributed</p>
-          <h1>Job Scheduler</h1>
-        </div>
-
-        <nav className="nav-tabs" aria-label="Dashboard views">
-          <button className={activeView === "overview" ? "active" : ""} onClick={() => setActiveView("overview")}>
-            Overview
-          </button>
-          <button className={activeView === "jobs" ? "active" : ""} onClick={() => setActiveView("jobs")}>
-            Jobs
-          </button>
-          <button className={activeView === "executions" ? "active" : ""} onClick={() => setActiveView("executions")}>
-            Executions
-          </button>
-          <button className={activeView === "workers" ? "active" : ""} onClick={() => setActiveView("workers")}>
-            Workers
-          </button>
-          <button className={activeView === "users" ? "active" : ""} onClick={() => setActiveView("users")}>
-            Users
-          </button>
-          <button className={activeView === "audit" ? "active" : ""} onClick={() => setActiveView("audit")}>
-            Audit
-          </button>
-          <button className={activeView === "health" ? "active" : ""} onClick={() => setActiveView("health")}>
-            Health
-          </button>
-        </nav>
-      </aside>
+      <Sidebar activeView={activeView} onViewChange={setActiveView} />
 
       <section className="workspace">
-        <header className="toolbar">
-          <label>
-            Gateway
-            <input value={apiBaseUrl} onChange={(event) => setApiBaseUrl(event.target.value)} />
-          </label>
-          <label>
-            API key
-            <input value={apiKey} onChange={(event) => setApiKey(event.target.value)} type="password" />
-          </label>
-          <button onClick={() => void refreshCurrentView()}>Refresh</button>
-        </header>
+        <Toolbar apiBaseUrl={apiBaseUrl} apiKey={apiKey} onApiBaseUrlChange={setApiBaseUrl} onApiKeyChange={setApiKey} onRefresh={() => void refreshCurrentView()} />
 
-        <section className="auth-strip">
-          {authUser ? (
-            <>
-              <span>
-                {authUser.name} / {authUser.role}
-              </span>
-              <button onClick={signOut}>Sign out</button>
-            </>
-          ) : (
-            <form className="auth-form" onSubmit={(event) => void submitAuth(event)}>
-              <select value={authMode} onChange={(event) => setAuthMode(event.target.value as "login" | "register")}>
-                <option value="login">Login</option>
-                <option value="register">Register</option>
-              </select>
-              <input
-                value={authForm.email}
-                onChange={(event) => setAuthForm({ ...authForm, email: event.target.value })}
-                placeholder="Email"
-                type="email"
-                required
-              />
-              {authMode === "register" && (
-                <input value={authForm.name} onChange={(event) => setAuthForm({ ...authForm, name: event.target.value })} placeholder="Name" required />
-              )}
-              <input
-                value={authForm.password}
-                onChange={(event) => setAuthForm({ ...authForm, password: event.target.value })}
-                placeholder="Password"
-                type="password"
-                required
-              />
-              <button type="submit">{authMode === "login" ? "Sign in" : "Create"}</button>
-            </form>
-          )}
-        </section>
+        <AuthStrip
+          authForm={authForm}
+          authMode={authMode}
+          authUser={authUser}
+          onAuthFormChange={setAuthForm}
+          onAuthModeChange={setAuthMode}
+          onSignOut={signOut}
+          onSubmit={(event) => void submitAuth(event)}
+        />
 
         <div className="status-line">{message}</div>
 
