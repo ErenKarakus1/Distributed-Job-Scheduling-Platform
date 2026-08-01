@@ -96,6 +96,18 @@ curl http://localhost:3000/api/jobs ^
   -H "x-api-key: djsp_your_key"
 ```
 
+List development API keys:
+
+```bash
+curl http://localhost:3000/internal/api-keys
+```
+
+Revoke a development API key:
+
+```bash
+curl -X DELETE http://localhost:3000/internal/api-keys/API_KEY_ID
+```
+
 ## Example Job
 
 Create a one-time HTTP job:

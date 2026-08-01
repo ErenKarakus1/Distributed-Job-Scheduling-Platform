@@ -164,6 +164,52 @@ app.post("/internal/api-keys", async (req, res, next) => {
   }
 });
 
+app.get("/internal/api-keys", async (_req, res, next) => {
+  try {
+    if (process.env.NODE_ENV === "production") {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+
+    const keys = await prisma.apiKey.findMany({
+      select: {
+        id: true,
+        name: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    res.json({ data: keys });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/internal/api-keys/:id", async (req, res, next) => {
+  try {
+    if (process.env.NODE_ENV === "production") {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+
+    const id = z.string().uuid().parse(req.params.id);
+    await prisma.apiKey.delete({
+      where: { id },
+    });
+
+    res.status(204).send();
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: "Validation failed", issues: error.issues });
+      return;
+    }
+
+    next(error);
+  }
+});
+
 app.use("/api", requireApiKey);
 
 app.all("/api/jobs", (req, res) => {
