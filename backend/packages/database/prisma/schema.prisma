@@ -153,13 +153,14 @@ model ExecutionAttempt {
 }
 
 model Worker {
-  id                 String       @id @default(uuid())
-  serviceInstanceId  String       @unique
-  status             WorkerStatus @default(IDLE)
-  lastHeartbeatAt    DateTime     @default(now())
-  currentExecutionId String?
-  startedAt          DateTime     @default(now())
-  updatedAt          DateTime     @updatedAt
+  id                   String       @id @default(uuid())
+  serviceInstanceId    String       @unique
+  status               WorkerStatus @default(IDLE)
+  lastHeartbeatAt      DateTime     @default(now())
+  currentExecutionId   String?
+  activeExecutionCount Int          @default(0)
+  startedAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
 
   executions Execution[]
   attempts   ExecutionAttempt[]

@@ -13,12 +13,15 @@ const readyQueueName = process.env.EXECUTION_READY_QUEUE ?? "execution.ready";
 const serviceInstanceId = process.env.WORKER_INSTANCE_ID ?? `worker-${randomUUID()}`;
 const heartbeatIntervalMs = Number(process.env.WORKER_HEARTBEAT_INTERVAL_MS ?? 10000);
 const responsePreviewLimit = Number(process.env.WORKER_RESPONSE_PREVIEW_LIMIT ?? 4000);
+const parsedWorkerConcurrency = Number(process.env.WORKER_CONCURRENCY ?? 1);
+const workerConcurrency = Number.isFinite(parsedWorkerConcurrency) ? Math.max(1, Math.min(parsedWorkerConcurrency, 50)) : 1;
 
 let workerId: string | undefined;
 let heartbeatInterval: NodeJS.Timeout | undefined;
 let rabbitConnection: amqp.ChannelModel | undefined;
 let rabbitChannel: amqp.Channel | undefined;
 let consumerTag: string | undefined;
+const activeExecutions = new Set<string>();
 
 function requestLogger(service: string): express.RequestHandler {
   return (req, res, next) => {
@@ -144,6 +147,7 @@ async function registerWorker() {
       status: "IDLE",
       lastHeartbeatAt: new Date(),
       currentExecutionId: null,
+      activeExecutionCount: 0,
     },
   });
 
@@ -158,7 +162,11 @@ async function heartbeatWorker() {
 
   await prisma.worker.update({
     where: { id: workerId },
-    data: { lastHeartbeatAt: new Date() },
+    data: {
+      lastHeartbeatAt: new Date(),
+      activeExecutionCount: activeExecutions.size,
+      status: activeExecutions.size > 0 ? "BUSY" : "IDLE",
+    },
   });
 }
 
@@ -167,26 +175,33 @@ async function markWorkerBusy(executionId: string) {
     throw new Error("Worker is not registered");
   }
 
+  activeExecutions.add(executionId);
+
   await prisma.worker.update({
     where: { id: workerId },
     data: {
       status: "BUSY",
       currentExecutionId: executionId,
+      activeExecutionCount: activeExecutions.size,
       lastHeartbeatAt: new Date(),
     },
   });
 }
 
-async function markWorkerIdle() {
+async function completeWorkerExecution(executionId: string) {
   if (!workerId) {
     return;
   }
 
+  activeExecutions.delete(executionId);
+  const nextExecutionId = activeExecutions.values().next().value as string | undefined;
+
   await prisma.worker.update({
     where: { id: workerId },
     data: {
-      status: "IDLE",
-      currentExecutionId: null,
+      status: activeExecutions.size > 0 ? "BUSY" : "IDLE",
+      currentExecutionId: nextExecutionId ?? null,
+      activeExecutionCount: activeExecutions.size,
       lastHeartbeatAt: new Date(),
     },
   });
@@ -230,7 +245,7 @@ async function executeJob(executionId: string) {
 
   if (claimed.count === 0) {
     console.warn(`execution ${executionId} could not be claimed`);
-    await markWorkerIdle();
+    await completeWorkerExecution(executionId);
     return;
   }
 
@@ -269,7 +284,7 @@ async function executeJob(executionId: string) {
       finishedAt,
     });
   } finally {
-    await markWorkerIdle();
+    await completeWorkerExecution(executionId);
   }
 }
 
@@ -357,7 +372,7 @@ async function startConsumer() {
   rabbitConnection = connection;
   rabbitChannel = channel;
   await channel.assertQueue(readyQueueName, { durable: true });
-  await channel.prefetch(1);
+  await channel.prefetch(workerConcurrency);
 
   const consumer = await channel.consume(readyQueueName, async (message) => {
     if (!message) {
@@ -382,11 +397,18 @@ async function startConsumer() {
     });
   }, heartbeatIntervalMs);
 
-  console.log(`worker ${serviceInstanceId} consuming ${readyQueueName}`);
+  console.log(`worker ${serviceInstanceId} consuming ${readyQueueName} with concurrency ${workerConcurrency}`);
 }
 
 app.get("/health", (_req, res) => {
-  res.json({ service: "worker-service", status: "ok", workerId, serviceInstanceId });
+  res.json({
+    service: "worker-service",
+    status: "ok",
+    workerId,
+    serviceInstanceId,
+    workerConcurrency,
+    activeExecutionCount: activeExecutions.size,
+  });
 });
 
 const server = app.listen(port, () => {
@@ -412,7 +434,7 @@ async function shutdown(signal: string) {
     if (workerId) {
       await prisma.worker.update({
         where: { id: workerId },
-        data: { status: "OFFLINE", currentExecutionId: null, lastHeartbeatAt: new Date() },
+        data: { status: "OFFLINE", currentExecutionId: null, activeExecutionCount: 0, lastHeartbeatAt: new Date() },
       });
     }
     await prisma.$disconnect();

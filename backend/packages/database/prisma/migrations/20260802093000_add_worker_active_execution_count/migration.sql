@@ -1,0 +1,2 @@
+ALTER TABLE "workers"
+ADD COLUMN "activeExecutionCount" INTEGER NOT NULL DEFAULT 0;

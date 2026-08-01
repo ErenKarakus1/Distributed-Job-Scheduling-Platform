@@ -79,6 +79,8 @@ Default ports:
 - Worker Service: `3004`
 - Dashboard: `5173`
 
+Worker concurrency defaults to `1`. Increase `WORKER_CONCURRENCY` to let a worker instance process multiple queued executions at the same time.
+
 ## API Keys
 
 In development, create an API key through the gateway:
