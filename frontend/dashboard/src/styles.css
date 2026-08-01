@@ -142,7 +142,7 @@ select {
 
 .job-form {
   display: grid;
-  grid-template-columns: minmax(160px, 1fr) 120px minmax(220px, 2fr) 190px 100px;
+  grid-template-columns: minmax(150px, 1fr) 130px 120px minmax(220px, 2fr) minmax(160px, 1fr) minmax(120px, 1fr) 100px;
   gap: 12px;
   align-items: end;
   margin-top: 14px;

@@ -7,9 +7,13 @@ function App() {
   const [apiKey, setApiKey] = React.useState("");
   const [newJob, setNewJob] = React.useState({
     name: "",
+    type: "ONE_TIME",
     method: "POST",
     url: "",
     runAt: new Date(Date.now() + 60000).toISOString().slice(0, 16),
+    cronExpression: "*/5 * * * *",
+    timezone: "UTC",
+    nextRunAt: new Date(Date.now() + 60000).toISOString().slice(0, 16),
   });
   const [jobs, setJobs] = React.useState<unknown[]>([]);
   const [executions, setExecutions] = React.useState<unknown[]>([]);
@@ -76,19 +80,28 @@ function App() {
     }
   }
 
-  async function createOneTimeJob(event: React.FormEvent<HTMLFormElement>) {
+  async function createJob(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     try {
       setMessage("Creating job");
+      const isRecurring = newJob.type === "RECURRING";
+
       await request("/api/jobs", {
         method: "POST",
         body: JSON.stringify({
           name: newJob.name,
-          type: "ONE_TIME",
+          type: newJob.type,
           method: newJob.method,
           url: newJob.url,
-          runAt: new Date(newJob.runAt).toISOString(),
+          runAt: isRecurring ? undefined : new Date(newJob.runAt).toISOString(),
+          schedule: isRecurring
+            ? {
+                cronExpression: newJob.cronExpression,
+                timezone: newJob.timezone,
+                nextRunAt: new Date(newJob.nextRunAt).toISOString(),
+              }
+            : undefined,
         }),
       });
       setNewJob((current) => ({ ...current, name: "", url: "" }));
@@ -150,11 +163,18 @@ function App() {
         {activeView === "jobs" && (
           <>
             <section className="panel create-panel">
-              <h2>Create One-Time Job</h2>
-              <form className="job-form" onSubmit={(event) => void createOneTimeJob(event)}>
+              <h2>Create Job</h2>
+              <form className="job-form" onSubmit={(event) => void createJob(event)}>
                 <label>
                   Name
                   <input value={newJob.name} onChange={(event) => setNewJob({ ...newJob, name: event.target.value })} required />
+                </label>
+                <label>
+                  Type
+                  <select value={newJob.type} onChange={(event) => setNewJob({ ...newJob, type: event.target.value })}>
+                    <option value="ONE_TIME">One-time</option>
+                    <option value="RECURRING">Recurring</option>
+                  </select>
                 </label>
                 <label>
                   Method
@@ -170,15 +190,41 @@ function App() {
                   URL
                   <input value={newJob.url} onChange={(event) => setNewJob({ ...newJob, url: event.target.value })} required />
                 </label>
-                <label>
-                  Run at
-                  <input
-                    type="datetime-local"
-                    value={newJob.runAt}
-                    onChange={(event) => setNewJob({ ...newJob, runAt: event.target.value })}
-                    required
-                  />
-                </label>
+                {newJob.type === "ONE_TIME" ? (
+                  <label>
+                    Run at
+                    <input
+                      type="datetime-local"
+                      value={newJob.runAt}
+                      onChange={(event) => setNewJob({ ...newJob, runAt: event.target.value })}
+                      required
+                    />
+                  </label>
+                ) : (
+                  <>
+                    <label>
+                      Cron
+                      <input
+                        value={newJob.cronExpression}
+                        onChange={(event) => setNewJob({ ...newJob, cronExpression: event.target.value })}
+                        required
+                      />
+                    </label>
+                    <label>
+                      Timezone
+                      <input value={newJob.timezone} onChange={(event) => setNewJob({ ...newJob, timezone: event.target.value })} required />
+                    </label>
+                    <label>
+                      Next run
+                      <input
+                        type="datetime-local"
+                        value={newJob.nextRunAt}
+                        onChange={(event) => setNewJob({ ...newJob, nextRunAt: event.target.value })}
+                        required
+                      />
+                    </label>
+                  </>
+                )}
                 <button type="submit">Create</button>
               </form>
             </section>
