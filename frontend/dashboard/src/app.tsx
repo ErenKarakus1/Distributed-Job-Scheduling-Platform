@@ -1,7 +1,7 @@
 import React from "react";
 import { createApiClient } from "./api.js";
 import { AUTH_TOKEN_STORAGE_KEY, createDefaultAuditFilters, createDefaultJobForm, createEmptyAuthForm, DEFAULT_PAGE_STATE } from "./dashboard-state.js";
-import { parseOptionalJson } from "./json.js";
+import { createAuditParams, createJobRequestBody, createPageParams } from "./dashboard-requests.js";
 import { AuthStrip, type DashboardView, Sidebar, Toolbar } from "./shell.js";
 import type { AuditEvent, AuthResponse, AuthUser, ExecutionRow, JobRow, MetricsOverview, NewJobFormState, PageResponse, ServiceHealthMap, WorkerRow } from "./types.js";
 import { DashboardViews } from "./views.js";
@@ -54,11 +54,7 @@ export function App() {
 
   async function refreshJobs(page = jobPage) {
     setMessage("Loading jobs");
-    const params = new URLSearchParams({
-      limit: String(page.limit),
-      offset: String(page.offset),
-    });
-    if (jobStatusFilter) params.set("status", jobStatusFilter);
+    const params = createPageParams(page, jobStatusFilter);
 
     const body = await request<PageResponse<JobRow>>(`/api/jobs?${params}`);
     setJobs(body.data);
@@ -75,11 +71,7 @@ export function App() {
 
   async function refreshExecutions(page = executionPage) {
     setMessage("Loading executions");
-    const params = new URLSearchParams({
-      limit: String(page.limit),
-      offset: String(page.offset),
-    });
-    if (executionStatusFilter) params.set("status", executionStatusFilter);
+    const params = createPageParams(page, executionStatusFilter);
 
     const body = await request<PageResponse<ExecutionRow>>(`/api/executions?${params}`);
     setExecutions(body.data);
@@ -89,10 +81,7 @@ export function App() {
 
   async function refreshWorkers(page = workerPage) {
     setMessage("Loading workers");
-    const params = new URLSearchParams({
-      limit: String(page.limit),
-      offset: String(page.offset),
-    });
+    const params = createPageParams(page);
     const body = await request<PageResponse<WorkerRow>>(`/api/workers?${params}`);
     setWorkers(body.data);
     setWorkerPage(body.page);
@@ -108,14 +97,7 @@ export function App() {
 
   async function refreshAuditEvents() {
     setMessage("Loading audit events");
-    const params = new URLSearchParams({
-      limit: String(auditFilters.limit),
-    });
-
-    if (auditFilters.actorType) params.set("actorType", auditFilters.actorType);
-    if (auditFilters.action) params.set("action", auditFilters.action);
-    if (auditFilters.resourceType) params.set("resourceType", auditFilters.resourceType);
-    if (auditFilters.resourceId) params.set("resourceId", auditFilters.resourceId);
+    const params = createAuditParams(auditFilters);
 
     const body = await request<{ data: AuditEvent[] }>(`/api/audit-events?${params}`);
     setAuditEvents(body.data);
@@ -148,33 +130,10 @@ export function App() {
 
     try {
       setMessage("Creating job");
-      const isRecurring = newJob.type === "RECURRING";
-      const headers = parseOptionalJson<Record<string, string>>(newJob.headers, "Headers");
-      const body = parseOptionalJson<unknown>(newJob.body, "Body");
 
       await request("/api/jobs", {
         method: "POST",
-        body: JSON.stringify({
-          name: newJob.name,
-          type: newJob.type,
-          method: newJob.method,
-          url: newJob.url,
-          headers,
-          body,
-          timeoutMs: newJob.timeoutMs,
-          maxAttempts: newJob.maxAttempts,
-          backoffType: newJob.backoffType,
-          retryInitialDelayMs: newJob.retryInitialDelayMs,
-          retryMaxDelayMs: newJob.retryMaxDelayMs,
-          runAt: isRecurring ? undefined : new Date(newJob.runAt).toISOString(),
-          schedule: isRecurring
-            ? {
-                cronExpression: newJob.cronExpression,
-                timezone: newJob.timezone,
-                nextRunAt: new Date(newJob.nextRunAt).toISOString(),
-              }
-            : undefined,
-        }),
+        body: JSON.stringify(createJobRequestBody(newJob)),
       });
       setNewJob((current) => ({ ...current, name: "", url: "", body: "" }));
       await refreshJobs();
