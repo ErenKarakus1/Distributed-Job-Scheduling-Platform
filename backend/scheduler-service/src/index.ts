@@ -1,15 +1,234 @@
 import express from "express";
+import amqp from "amqplib";
+import { CronExpressionParser } from "cron-parser";
+import { Prisma, PrismaClient } from "@prisma/client";
+import { z } from "zod";
 
 const app = express();
 const port = Number(process.env.SCHEDULER_SERVICE_PORT ?? 3003);
+const prisma = new PrismaClient();
+const rabbitmqUrl = process.env.RABBITMQ_URL ?? "amqp://scheduler:scheduler@localhost:5672";
+const readyQueueName = process.env.EXECUTION_READY_QUEUE ?? "execution.ready";
+const pollIntervalMs = Number(process.env.SCHEDULER_POLL_INTERVAL_MS ?? 5000);
+const batchSize = Number(process.env.SCHEDULER_BATCH_SIZE ?? 50);
 
 app.use(express.json());
 
+type SchedulerStats = {
+  oneTimeQueued: number;
+  recurringQueued: number;
+  retriesQueued: number;
+};
+
+let channelPromise: Promise<amqp.Channel> | undefined;
+let schedulerRunning = false;
+
+const scheduleRunSchema = z.object({
+  now: z.coerce.date().optional(),
+});
+
+function getChannel() {
+  channelPromise ??= amqp.connect(rabbitmqUrl).then(async (connection) => {
+    const channel = await connection.createChannel();
+    await channel.assertQueue(readyQueueName, { durable: true });
+
+    connection.on("close", () => {
+      channelPromise = undefined;
+    });
+
+    connection.on("error", () => {
+      channelPromise = undefined;
+    });
+
+    return channel;
+  });
+
+  return channelPromise;
+}
+
+async function publishExecution(executionId: string) {
+  const channel = await getChannel();
+  const payload = Buffer.from(JSON.stringify({ executionId }));
+
+  channel.sendToQueue(readyQueueName, payload, {
+    contentType: "application/json",
+    deliveryMode: 2,
+  });
+}
+
+function nextCronRun(cronExpression: string, timezone: string, from: Date) {
+  return CronExpressionParser.parse(cronExpression, {
+    currentDate: from,
+    tz: timezone,
+  }).next().toDate();
+}
+
+async function queueExecution(executionId: string) {
+  await publishExecution(executionId);
+
+  await prisma.execution.update({
+    where: { id: executionId },
+    data: { status: "QUEUED" },
+  });
+}
+
+async function scheduleDueOneTimeJobs(now: Date) {
+  const jobs = await prisma.job.findMany({
+    where: {
+      type: "ONE_TIME",
+      status: "ACTIVE",
+      runAt: { lte: now },
+      executions: { none: {} },
+    },
+    take: batchSize,
+    orderBy: { runAt: "asc" },
+  });
+
+  for (const job of jobs) {
+    const execution = await prisma.execution.create({
+      data: {
+        jobId: job.id,
+        status: "PENDING",
+        scheduledFor: job.runAt ?? now,
+        nextAttemptAt: job.runAt ?? now,
+      },
+    });
+
+    await queueExecution(execution.id);
+  }
+
+  return jobs.length;
+}
+
+async function scheduleDueRecurringJobs(now: Date) {
+  const schedules = await prisma.jobSchedule.findMany({
+    where: {
+      nextRunAt: { lte: now },
+      job: { status: "ACTIVE", type: "RECURRING" },
+    },
+    include: { job: true },
+    take: batchSize,
+    orderBy: { nextRunAt: "asc" },
+  });
+
+  for (const schedule of schedules) {
+    const executionId = await prisma.$transaction(async (tx) => {
+      const lockedSchedule = await tx.jobSchedule.findUnique({
+        where: { id: schedule.id },
+      });
+
+      if (!lockedSchedule || lockedSchedule.nextRunAt > now) {
+        return undefined;
+      }
+
+      const execution = await tx.execution.create({
+        data: {
+          jobId: schedule.jobId,
+          status: "PENDING",
+          scheduledFor: lockedSchedule.nextRunAt,
+          nextAttemptAt: lockedSchedule.nextRunAt,
+        },
+      });
+
+      await tx.jobSchedule.update({
+        where: { id: schedule.id },
+        data: {
+          lastRunAt: lockedSchedule.nextRunAt,
+          nextRunAt: nextCronRun(lockedSchedule.cronExpression, lockedSchedule.timezone, now),
+        },
+      });
+
+      return execution.id;
+    });
+
+    if (executionId) {
+      await queueExecution(executionId);
+    }
+  }
+
+  return schedules.length;
+}
+
+async function scheduleDueRetries(now: Date) {
+  const executions = await prisma.execution.findMany({
+    where: {
+      status: "RETRY_SCHEDULED",
+      nextAttemptAt: { lte: now },
+    },
+    take: batchSize,
+    orderBy: { nextAttemptAt: "asc" },
+  });
+
+  for (const execution of executions) {
+    await queueExecution(execution.id);
+  }
+
+  return executions.length;
+}
+
+async function runSchedulerOnce(now = new Date()): Promise<SchedulerStats> {
+  const [oneTimeQueued, recurringQueued, retriesQueued] = await Promise.all([
+    scheduleDueOneTimeJobs(now),
+    scheduleDueRecurringJobs(now),
+    scheduleDueRetries(now),
+  ]);
+
+  return { oneTimeQueued, recurringQueued, retriesQueued };
+}
+
+async function runSchedulerLoop() {
+  if (schedulerRunning) {
+    return;
+  }
+
+  schedulerRunning = true;
+
+  try {
+    const stats = await runSchedulerOnce();
+    const queued = stats.oneTimeQueued + stats.recurringQueued + stats.retriesQueued;
+
+    if (queued > 0) {
+      console.log(`scheduler queued ${queued} execution(s)`, stats);
+    }
+  } catch (error) {
+    console.error("scheduler loop failed", error);
+  } finally {
+    schedulerRunning = false;
+  }
+}
+
 app.get("/health", (_req, res) => {
   res.json({ service: "scheduler-service", status: "ok" });
+});
+
+app.post("/schedule/run", async (req, res, next) => {
+  try {
+    const data = scheduleRunSchema.parse(req.body);
+    const stats = await runSchedulerOnce(data.now ?? new Date());
+
+    res.json(stats);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: "Validation failed", issues: error.issues });
+      return;
+    }
+
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      res.status(409).json({ error: "Scheduling conflict", code: error.code });
+      return;
+    }
+
+    next(error);
+  }
+});
+
+app.use((error: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error(error);
+  res.status(500).json({ error: "Internal server error" });
 });
 
 app.listen(port, () => {
   console.log(`scheduler-service listening on port ${port}`);
 });
 
+setInterval(runSchedulerLoop, pollIntervalMs);
