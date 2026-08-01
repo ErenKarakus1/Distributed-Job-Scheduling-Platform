@@ -4,11 +4,12 @@ import axios, { AxiosError, Method } from "axios";
 import jwt, { type SignOptions } from "jsonwebtoken";
 import { Redis } from "ioredis";
 import { PrismaClient } from "@prisma/client";
-import { getRateLimitIdentity, hashApiKey, readApiKey, readBearerToken } from "./auth.js";
+import { hashApiKey, readApiKey } from "./auth.js";
 import { registerAuditRoutes } from "./audit-routes.js";
 import { registerAuthRoutes } from "./auth-routes.js";
 import { registerHealthRoutes } from "./health-routes.js";
 import { requestIdMiddleware, requestLogger } from "./http.js";
+import { createGatewayMiddleware } from "./middleware.js";
 import { registerProxyRoutes } from "./proxy-routes.js";
 import type { AuditInput, GatewayServices, ServiceTarget } from "./types.js";
 
@@ -57,6 +58,14 @@ const services = {
   worker: { name: "worker-service", baseUrl: workerServiceUrl },
 } satisfies GatewayServices;
 
+const { rateLimitRequests, requireAdminUser, requireApiAuth, requireJwt } = createGatewayMiddleware({
+  prisma,
+  redis,
+  jwtSecret,
+  rateLimitMaxRequests,
+  rateLimitWindowMs,
+});
+
 function signUserToken(user: { id: string; email: string; role: string }) {
   return jwt.sign({ sub: user.id, email: user.email, role: user.role }, jwtSecret, {
     expiresIn: jwtExpiresIn,
@@ -96,118 +105,6 @@ async function recordAuditEvent(req: express.Request, res: express.Response, aud
       metadata: audit.metadata ?? undefined,
     },
   });
-}
-
-async function rateLimitRequests(req: express.Request, res: express.Response, next: express.NextFunction) {
-  if (rateLimitMaxRequests <= 0 || rateLimitWindowMs <= 0) {
-    next();
-    return;
-  }
-
-  try {
-    if (redis.status === "wait") {
-      await redis.connect();
-    }
-
-    const windowSeconds = Math.ceil(rateLimitWindowMs / 1000);
-    const key = `rate-limit:${getRateLimitIdentity(req)}:${Math.floor(Date.now() / rateLimitWindowMs)}`;
-    const count = await redis.incr(key);
-
-    if (count === 1) {
-      await redis.expire(key, windowSeconds);
-    }
-
-    const remaining = Math.max(rateLimitMaxRequests - count, 0);
-    res.setHeader("x-ratelimit-limit", String(rateLimitMaxRequests));
-    res.setHeader("x-ratelimit-remaining", String(remaining));
-    res.setHeader("x-ratelimit-window-ms", String(rateLimitWindowMs));
-
-    if (count > rateLimitMaxRequests) {
-      res.status(429).json({ error: "Rate limit exceeded" });
-      return;
-    }
-
-    next();
-  } catch (error) {
-    console.error("rate limit check failed", error);
-    next();
-  }
-}
-
-async function requireApiKey(req: express.Request, res: express.Response, next: express.NextFunction) {
-  const apiKey = readApiKey(req);
-
-  if (!apiKey) {
-    res.status(401).json({ error: "Missing API key" });
-    return;
-  }
-
-  const key = await prisma.apiKey.findUnique({
-    where: { keyHash: hashApiKey(apiKey) },
-  });
-
-  if (!key) {
-    res.status(401).json({ error: "Invalid API key" });
-    return;
-  }
-
-  next();
-}
-
-async function requireJwt(req: express.Request, res: express.Response, next: express.NextFunction) {
-  const token = readBearerToken(req);
-
-  if (!token) {
-    res.status(401).json({ error: "Missing bearer token" });
-    return;
-  }
-
-  try {
-    const payload = jwt.verify(token, jwtSecret);
-
-    if (!payload || typeof payload !== "object" || typeof payload.sub !== "string") {
-      res.status(401).json({ error: "Invalid bearer token" });
-      return;
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { id: payload.sub },
-      select: { id: true, email: true, name: true, role: true, createdAt: true },
-    });
-
-    if (!user) {
-      res.status(401).json({ error: "Invalid bearer token" });
-      return;
-    }
-
-    res.locals.user = user;
-    next();
-  } catch {
-    res.status(401).json({ error: "Invalid bearer token" });
-  }
-}
-
-async function requireApiAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
-  if (readApiKey(req)) {
-    await requireApiKey(req, res, next);
-    return;
-  }
-
-  await requireJwt(req, res, next);
-}
-
-function requireAdminUser(req: express.Request, res: express.Response, next: express.NextFunction) {
-  if (readApiKey(req)) {
-    next();
-    return;
-  }
-
-  if (res.locals.user?.role !== "ADMIN") {
-    res.status(403).json({ error: "Admin role is required" });
-    return;
-  }
-
-  next();
 }
 
 async function forwardRequest(req: express.Request, res: express.Response, target: ServiceTarget, path: string, audit?: AuditInput) {
