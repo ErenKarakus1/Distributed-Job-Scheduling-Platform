@@ -82,6 +82,10 @@ const loginSchema = z.object({
   email: z.string().email().max(320).transform((email) => email.toLowerCase()),
   password: z.string().min(1).max(200),
 });
+const userRoleSchema = z.enum(["ADMIN", "VIEWER"]);
+const updateUserRoleSchema = z.object({
+  role: userRoleSchema,
+});
 
 type ServiceTarget = {
   name: string;
@@ -413,6 +417,69 @@ app.post("/auth/login", async (req, res, next) => {
 
 app.get("/auth/me", requireJwt, (_req, res) => {
   res.json({ user: res.locals.user });
+});
+
+app.get("/internal/users", async (_req, res, next) => {
+  try {
+    if (process.env.NODE_ENV === "production") {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    res.json({ data: users });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.patch("/internal/users/:id/role", async (req, res, next) => {
+  try {
+    if (process.env.NODE_ENV === "production") {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+
+    const id = z.string().uuid().parse(req.params.id);
+    const data = updateUserRoleSchema.parse(req.body);
+    const user = await prisma.user.update({
+      where: { id },
+      data: { role: data.role },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    res.json(user);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: "Validation failed", issues: error.issues });
+      return;
+    }
+
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "P2025") {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    next(error);
+  }
 });
 
 app.use("/api", requireApiAuth);

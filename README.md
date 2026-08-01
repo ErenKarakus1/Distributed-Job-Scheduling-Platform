@@ -139,6 +139,20 @@ curl -X POST http://localhost:3000/auth/login ^
   -d "{\"email\":\"admin@example.com\",\"password\":\"password123\"}"
 ```
 
+List development users:
+
+```bash
+curl http://localhost:3000/internal/users
+```
+
+Update a development user's role:
+
+```bash
+curl -X PATCH http://localhost:3000/internal/users/USER_ID/role ^
+  -H "content-type: application/json" ^
+  -d "{\"role\":\"VIEWER\"}"
+```
+
 ## Example Job
 
 Create a one-time HTTP job:
