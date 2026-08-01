@@ -4,9 +4,18 @@ import axios, { AxiosError, Method } from "axios";
 import jwt, { type SignOptions } from "jsonwebtoken";
 import { Redis } from "ioredis";
 import { Prisma, PrismaClient } from "@prisma/client";
-import { createHash, randomBytes, randomUUID, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
-import { promisify } from "node:util";
+import { randomBytes, randomUUID } from "node:crypto";
 import { z } from "zod";
+import {
+  auditQuerySchema,
+  getRateLimitIdentity,
+  hashApiKey,
+  hashPassword,
+  readApiKey,
+  readBearerToken,
+  routeParam,
+  verifyPassword,
+} from "./auth.js";
 
 const app = express();
 const port = Number(process.env.API_GATEWAY_PORT ?? 3000);
@@ -17,7 +26,6 @@ const schedulerServiceUrl = process.env.SCHEDULER_SERVICE_URL ?? "http://localho
 const workerServiceUrl = process.env.WORKER_SERVICE_URL ?? "http://localhost:3004";
 const jwtSecret = process.env.JWT_SECRET ?? "development-jwt-secret-change-me";
 const jwtExpiresIn = (process.env.JWT_EXPIRES_IN ?? "8h") as SignOptions["expiresIn"];
-const scrypt = promisify(scryptCallback);
 const redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", {
   lazyConnect: true,
   maxRetriesPerRequest: 3,
@@ -93,14 +101,6 @@ const userRoleSchema = z.enum(["ADMIN", "VIEWER"]);
 const updateUserRoleSchema = z.object({
   role: userRoleSchema,
 });
-const auditQuerySchema = z.object({
-  limit: z.coerce.number().int().min(1).max(100).default(50),
-  actorType: z.string().min(1).max(80).optional(),
-  actorId: z.string().min(1).max(200).optional(),
-  action: z.string().min(1).max(120).optional(),
-  resourceType: z.string().min(1).max(120).optional(),
-  resourceId: z.string().min(1).max(200).optional(),
-});
 
 type ServiceTarget = {
   name: string;
@@ -121,68 +121,10 @@ const services = {
   worker: { name: "worker-service", baseUrl: workerServiceUrl },
 } satisfies Record<string, ServiceTarget>;
 
-function hashApiKey(apiKey: string) {
-  return createHash("sha256").update(apiKey).digest("hex");
-}
-
-async function hashPassword(password: string) {
-  const salt = randomBytes(16).toString("hex");
-  const derivedKey = (await scrypt(password, salt, 64)) as Buffer;
-
-  return `scrypt:${salt}:${derivedKey.toString("hex")}`;
-}
-
-async function verifyPassword(password: string, passwordHash: string) {
-  const [algorithm, salt, expectedHash] = passwordHash.split(":");
-
-  if (algorithm !== "scrypt" || !salt || !expectedHash) {
-    return false;
-  }
-
-  const expected = Buffer.from(expectedHash, "hex");
-  const actual = (await scrypt(password, salt, expected.length)) as Buffer;
-
-  return expected.length === actual.length && timingSafeEqual(expected, actual);
-}
-
 function signUserToken(user: { id: string; email: string; role: string }) {
   return jwt.sign({ sub: user.id, email: user.email, role: user.role }, jwtSecret, {
     expiresIn: jwtExpiresIn,
   });
-}
-
-function readApiKey(req: express.Request) {
-  const headerValue = req.header("x-api-key");
-
-  if (!headerValue) {
-    return undefined;
-  }
-
-  return headerValue.trim();
-}
-
-function readBearerToken(req: express.Request) {
-  const authorization = req.header("authorization");
-  return authorization?.startsWith("Bearer ") ? authorization.slice("Bearer ".length).trim() : undefined;
-}
-
-function routeParam(value: string | string[] | undefined) {
-  return Array.isArray(value) ? value[0] : value;
-}
-
-function getRateLimitIdentity(req: express.Request) {
-  const apiKey = readApiKey(req);
-  const bearerToken = readBearerToken(req);
-
-  if (apiKey) {
-    return `api-key:${hashApiKey(apiKey)}`;
-  }
-
-  if (bearerToken) {
-    return `jwt:${hashApiKey(bearerToken)}`;
-  }
-
-  return `ip:${req.ip}`;
 }
 
 function getAuditActor(req: express.Request, res: express.Response) {
