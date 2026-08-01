@@ -387,7 +387,7 @@ function App() {
 
         {activeView === "workers" && (
           <>
-            <DataPanel title="Workers" rows={workers} emptyText="No workers loaded" />
+            <WorkerPanel rows={workers} />
             <Pager page={workerPage} onChange={setWorkerPage} onApply={(page) => void refreshWorkers(page)} />
           </>
         )}
@@ -502,6 +502,48 @@ function OverviewPanel(props: { metrics: Record<string, unknown> }) {
           <strong>{String(value ?? "-")}</strong>
         </article>
       ))}
+    </section>
+  );
+}
+
+function WorkerPanel(props: { rows: unknown[] }) {
+  return (
+    <section className="panel">
+      <h2>Workers</h2>
+      {props.rows.length === 0 ? (
+        <p className="empty-state">No workers loaded</p>
+      ) : (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Instance</th>
+                <th>Status</th>
+                <th>Active</th>
+                <th>Current execution</th>
+                <th>Last heartbeat</th>
+              </tr>
+            </thead>
+            <tbody>
+              {props.rows.map((row, index) => {
+                const worker = row as Record<string, unknown>;
+
+                return (
+                  <tr key={String(worker.id ?? index)}>
+                    <td>{String(worker.serviceInstanceId ?? worker.id ?? "")}</td>
+                    <td>
+                      <span className={`status-pill ${String(worker.status ?? "").toLowerCase()}`}>{String(worker.status ?? "")}</span>
+                    </td>
+                    <td>{String(worker.activeExecutionCount ?? 0)}</td>
+                    <td>{String(worker.currentExecutionId ?? "-")}</td>
+                    <td>{String(worker.lastHeartbeatAt ?? "")}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </section>
   );
 }
