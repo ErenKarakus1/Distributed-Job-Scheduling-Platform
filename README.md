@@ -111,6 +111,13 @@ curl http://localhost:3000/api/jobs ^
 
 JWT users with the `VIEWER` role can read dashboard data. Mutating API routes require an `ADMIN` JWT or an API key.
 
+Recent audit events are available through the gateway:
+
+```bash
+curl http://localhost:3000/api/audit-events ^
+  -H "authorization: Bearer YOUR_JWT"
+```
+
 List development API keys:
 
 ```bash

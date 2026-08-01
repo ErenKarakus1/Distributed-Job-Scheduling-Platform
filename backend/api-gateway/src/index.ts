@@ -3,7 +3,7 @@ import cors from "cors";
 import axios, { AxiosError, Method } from "axios";
 import jwt, { type SignOptions } from "jsonwebtoken";
 import { Redis } from "ioredis";
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { createHash, randomBytes, randomUUID, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import { z } from "zod";
@@ -99,6 +99,13 @@ type ServiceTarget = {
   baseUrl: string;
 };
 
+type AuditInput = {
+  action: string;
+  resourceType: string;
+  resourceId?: string;
+  metadata?: Prisma.InputJsonObject;
+};
+
 const services = {
   job: { name: "job-service", baseUrl: jobServiceUrl },
   execution: { name: "execution-service", baseUrl: executionServiceUrl },
@@ -151,6 +158,10 @@ function readBearerToken(req: express.Request) {
   return authorization?.startsWith("Bearer ") ? authorization.slice("Bearer ".length).trim() : undefined;
 }
 
+function routeParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
 function getRateLimitIdentity(req: express.Request) {
   const apiKey = readApiKey(req);
   const bearerToken = readBearerToken(req);
@@ -164,6 +175,41 @@ function getRateLimitIdentity(req: express.Request) {
   }
 
   return `ip:${req.ip}`;
+}
+
+function getAuditActor(req: express.Request, res: express.Response) {
+  const apiKey = readApiKey(req);
+
+  if (apiKey) {
+    return {
+      actorType: "API_KEY",
+      actorId: hashApiKey(apiKey),
+      actorLabel: "api-key",
+    };
+  }
+
+  const user = res.locals.user as { id?: string; email?: string } | undefined;
+
+  return {
+    actorType: "USER",
+    actorId: user?.id,
+    actorLabel: user?.email,
+  };
+}
+
+async function recordAuditEvent(req: express.Request, res: express.Response, audit: AuditInput) {
+  const actor = getAuditActor(req, res);
+
+  await prisma.auditEvent.create({
+    data: {
+      ...actor,
+      action: audit.action,
+      resourceType: audit.resourceType,
+      resourceId: audit.resourceId,
+      requestId: String(res.locals.requestId),
+      metadata: audit.metadata ?? undefined,
+    },
+  });
 }
 
 async function rateLimitRequests(req: express.Request, res: express.Response, next: express.NextFunction) {
@@ -278,7 +324,7 @@ function requireAdminUser(req: express.Request, res: express.Response, next: exp
   next();
 }
 
-async function forwardRequest(req: express.Request, res: express.Response, target: ServiceTarget, path: string) {
+async function forwardRequest(req: express.Request, res: express.Response, target: ServiceTarget, path: string, audit?: AuditInput) {
   try {
     const response = await axios.request({
       method: req.method as Method,
@@ -289,6 +335,10 @@ async function forwardRequest(req: express.Request, res: express.Response, targe
       headers: { "x-request-id": String(res.locals.requestId) },
       validateStatus: () => true,
     });
+
+    if (audit && response.status >= 200 && response.status < 300) {
+      await recordAuditEvent(req, res, audit);
+    }
 
     res.status(response.status).json(response.data);
   } catch (error) {
@@ -546,12 +596,31 @@ app.patch("/internal/users/:id/role", async (req, res, next) => {
 
 app.use("/api", rateLimitRequests, requireApiAuth);
 
+app.get("/api/audit-events", (req, res) => {
+  const limit = z.coerce.number().int().min(1).max(100).default(50).parse(req.query.limit);
+
+  prisma.auditEvent
+    .findMany({
+      orderBy: { createdAt: "desc" },
+      take: limit,
+    })
+    .then((events) => res.json({ data: events }))
+    .catch((error: unknown) => {
+      console.error(error);
+      res.status(500).json({ error: "Internal server error" });
+    });
+});
+
 app.get("/api/jobs", (req, res) => {
   void forwardRequest(req, res, services.job, "/jobs");
 });
 
 app.post("/api/jobs", requireAdminUser, (req, res) => {
-  void forwardRequest(req, res, services.job, "/jobs");
+  void forwardRequest(req, res, services.job, "/jobs", {
+    action: "job.create",
+    resourceType: "job",
+    metadata: { name: req.body?.name, type: req.body?.type },
+  });
 });
 
 app.get("/api/jobs/:id", (req, res) => {
@@ -559,15 +628,31 @@ app.get("/api/jobs/:id", (req, res) => {
 });
 
 app.patch("/api/jobs/:id", requireAdminUser, (req, res) => {
-  void forwardRequest(req, res, services.job, `/jobs/${req.params.id}`);
+  const jobId = routeParam(req.params.id);
+  void forwardRequest(req, res, services.job, `/jobs/${req.params.id}`, {
+    action: "job.update",
+    resourceType: "job",
+    resourceId: jobId,
+  });
 });
 
 app.delete("/api/jobs/:id", requireAdminUser, (req, res) => {
-  void forwardRequest(req, res, services.job, `/jobs/${req.params.id}`);
+  const jobId = routeParam(req.params.id);
+  void forwardRequest(req, res, services.job, `/jobs/${req.params.id}`, {
+    action: "job.delete",
+    resourceType: "job",
+    resourceId: jobId,
+  });
 });
 
 app.post("/api/jobs/:id/:action", requireAdminUser, (req, res) => {
-  void forwardRequest(req, res, services.job, `/jobs/${req.params.id}/${req.params.action}`);
+  const jobId = routeParam(req.params.id);
+  const action = routeParam(req.params.action);
+  void forwardRequest(req, res, services.job, `/jobs/${req.params.id}/${req.params.action}`, {
+    action: `job.${action}`,
+    resourceType: "job",
+    resourceId: jobId,
+  });
 });
 
 app.get("/api/executions", (req, res) => {
@@ -575,7 +660,11 @@ app.get("/api/executions", (req, res) => {
 });
 
 app.post("/api/executions", requireAdminUser, (req, res) => {
-  void forwardRequest(req, res, services.execution, "/executions");
+  void forwardRequest(req, res, services.execution, "/executions", {
+    action: "execution.create",
+    resourceType: "execution",
+    metadata: { jobId: req.body?.jobId },
+  });
 });
 
 app.get("/api/executions/:id", (req, res) => {
@@ -583,7 +672,13 @@ app.get("/api/executions/:id", (req, res) => {
 });
 
 app.post("/api/executions/:id/:action", requireAdminUser, (req, res) => {
-  void forwardRequest(req, res, services.execution, `/executions/${req.params.id}/${req.params.action}`);
+  const executionId = routeParam(req.params.id);
+  const action = routeParam(req.params.action);
+  void forwardRequest(req, res, services.execution, `/executions/${req.params.id}/${req.params.action}`, {
+    action: `execution.${action}`,
+    resourceType: "execution",
+    resourceId: executionId,
+  });
 });
 
 app.get("/api/workers", (req, res) => {
@@ -595,11 +690,17 @@ app.get("/api/metrics/overview", (req, res) => {
 });
 
 app.post("/api/schedule/run", requireAdminUser, (req, res) => {
-  void forwardRequest(req, res, services.scheduler, "/schedule/run");
+  void forwardRequest(req, res, services.scheduler, "/schedule/run", {
+    action: "scheduler.run",
+    resourceType: "scheduler",
+  });
 });
 
 app.post("/api/recover/stalled", requireAdminUser, (req, res) => {
-  void forwardRequest(req, res, services.execution, "/recover/stalled");
+  void forwardRequest(req, res, services.execution, "/recover/stalled", {
+    action: "execution.recover_stalled",
+    resourceType: "execution",
+  });
 });
 
 app.use((error: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

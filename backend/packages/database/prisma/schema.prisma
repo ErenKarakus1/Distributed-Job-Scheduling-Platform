@@ -82,6 +82,24 @@ model User {
   @@map("users")
 }
 
+model AuditEvent {
+  id           String   @id @default(uuid())
+  actorType    String
+  actorId      String?
+  actorLabel   String?
+  action       String
+  resourceType String
+  resourceId   String?
+  requestId    String?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([actorType, actorId])
+  @@index([resourceType, resourceId])
+  @@map("audit_events")
+}
+
 model Job {
   id                  String      @id @default(uuid())
   name                String
