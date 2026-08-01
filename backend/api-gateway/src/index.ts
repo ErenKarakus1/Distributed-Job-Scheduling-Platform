@@ -4,27 +4,18 @@ import axios, { AxiosError, Method } from "axios";
 import jwt, { type SignOptions } from "jsonwebtoken";
 import { Redis } from "ioredis";
 import { PrismaClient } from "@prisma/client";
-import { randomBytes } from "node:crypto";
 import { ZodError } from "zod";
 import {
   auditQuerySchema,
   getRateLimitIdentity,
   hashApiKey,
-  hashPassword,
   readApiKey,
   readBearerToken,
-  verifyPassword,
 } from "./auth.js";
+import { registerAuthRoutes } from "./auth-routes.js";
 import { requestIdMiddleware, requestLogger } from "./http.js";
 import { registerProxyRoutes } from "./proxy-routes.js";
 import type { AuditInput, GatewayServices, ServiceTarget } from "./types.js";
-import {
-  createApiKeySchema,
-  loginSchema,
-  parseRouteId,
-  registerSchema,
-  updateUserRoleSchema,
-} from "./validation.js";
 
 const app = express();
 const port = Number(process.env.API_GATEWAY_PORT ?? 3000);
@@ -279,220 +270,7 @@ app.get("/health/services", async (_req, res) => {
   res.json(Object.fromEntries(entries));
 });
 
-app.post("/internal/api-keys", async (req, res, next) => {
-  try {
-    if (process.env.NODE_ENV === "production") {
-      res.status(404).json({ error: "Not found" });
-      return;
-    }
-
-    const data = createApiKeySchema.parse(req.body);
-    const apiKey = `djsp_${randomBytes(32).toString("hex")}`;
-    const key = await prisma.apiKey.create({
-      data: {
-        name: data.name,
-        keyHash: hashApiKey(apiKey),
-      },
-      select: {
-        id: true,
-        name: true,
-        createdAt: true,
-      },
-    });
-
-    res.status(201).json({ ...key, apiKey });
-  } catch (error) {
-    if (error instanceof ZodError) {
-      res.status(400).json({ error: "Validation failed", issues: error.issues });
-      return;
-    }
-
-    next(error);
-  }
-});
-
-app.get("/internal/api-keys", async (_req, res, next) => {
-  try {
-    if (process.env.NODE_ENV === "production") {
-      res.status(404).json({ error: "Not found" });
-      return;
-    }
-
-    const keys = await prisma.apiKey.findMany({
-      select: {
-        id: true,
-        name: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-      orderBy: { createdAt: "desc" },
-    });
-
-    res.json({ data: keys });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.delete("/internal/api-keys/:id", async (req, res, next) => {
-  try {
-    if (process.env.NODE_ENV === "production") {
-      res.status(404).json({ error: "Not found" });
-      return;
-    }
-
-    const id = parseRouteId(req.params.id);
-    await prisma.apiKey.delete({
-      where: { id },
-    });
-
-    res.status(204).send();
-  } catch (error) {
-    if (error instanceof ZodError) {
-      res.status(400).json({ error: "Validation failed", issues: error.issues });
-      return;
-    }
-
-    next(error);
-  }
-});
-
-app.post("/auth/register", async (req, res, next) => {
-  try {
-    if (process.env.NODE_ENV === "production") {
-      res.status(404).json({ error: "Not found" });
-      return;
-    }
-
-    const data = registerSchema.parse(req.body);
-    const user = await prisma.user.create({
-      data: {
-        email: data.email,
-        name: data.name,
-        passwordHash: await hashPassword(data.password),
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        createdAt: true,
-      },
-    });
-
-    res.status(201).json({ user, token: signUserToken(user) });
-  } catch (error) {
-    if (error instanceof ZodError) {
-      res.status(400).json({ error: "Validation failed", issues: error.issues });
-      return;
-    }
-
-    if (typeof error === "object" && error !== null && "code" in error && error.code === "P2002") {
-      res.status(409).json({ error: "User already exists" });
-      return;
-    }
-
-    next(error);
-  }
-});
-
-app.post("/auth/login", async (req, res, next) => {
-  try {
-    const data = loginSchema.parse(req.body);
-    const userWithPassword = await prisma.user.findUnique({
-      where: { email: data.email },
-    });
-
-    if (!userWithPassword || !(await verifyPassword(data.password, userWithPassword.passwordHash))) {
-      res.status(401).json({ error: "Invalid email or password" });
-      return;
-    }
-
-    const user = {
-      id: userWithPassword.id,
-      email: userWithPassword.email,
-      name: userWithPassword.name,
-      role: userWithPassword.role,
-      createdAt: userWithPassword.createdAt,
-    };
-
-    res.json({ user, token: signUserToken(user) });
-  } catch (error) {
-    if (error instanceof ZodError) {
-      res.status(400).json({ error: "Validation failed", issues: error.issues });
-      return;
-    }
-
-    next(error);
-  }
-});
-
-app.get("/auth/me", requireJwt, (_req, res) => {
-  res.json({ user: res.locals.user });
-});
-
-app.get("/internal/users", async (_req, res, next) => {
-  try {
-    if (process.env.NODE_ENV === "production") {
-      res.status(404).json({ error: "Not found" });
-      return;
-    }
-
-    const users = await prisma.user.findMany({
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-      orderBy: { createdAt: "desc" },
-    });
-
-    res.json({ data: users });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.patch("/internal/users/:id/role", async (req, res, next) => {
-  try {
-    if (process.env.NODE_ENV === "production") {
-      res.status(404).json({ error: "Not found" });
-      return;
-    }
-
-    const id = parseRouteId(req.params.id);
-    const data = updateUserRoleSchema.parse(req.body);
-    const user = await prisma.user.update({
-      where: { id },
-      data: { role: data.role },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
-
-    res.json(user);
-  } catch (error) {
-    if (error instanceof ZodError) {
-      res.status(400).json({ error: "Validation failed", issues: error.issues });
-      return;
-    }
-
-    if (typeof error === "object" && error !== null && "code" in error && error.code === "P2025") {
-      res.status(404).json({ error: "User not found" });
-      return;
-    }
-
-    next(error);
-  }
-});
+registerAuthRoutes(app, { prisma, requireJwt, signUserToken });
 
 app.use("/api", rateLimitRequests, requireApiAuth);
 
