@@ -9,6 +9,7 @@ A microservices-based platform for creating one-time and recurring HTTP jobs, ex
 - TypeScript
 - PostgreSQL
 - RabbitMQ
+- Redis
 - Axios
 - Zod
 - Prisma
@@ -28,10 +29,14 @@ A microservices-based platform for creating one-time and recurring HTTP jobs, ex
 
 - `backend/`: Express microservices and backend shared packages
 - `frontend/`: React + Vite applications
-- `docker-compose.yml`: local PostgreSQL and RabbitMQ infrastructure
+- `docker-compose.yml`: local PostgreSQL, RabbitMQ, and Redis infrastructure
+
+## Redis Usage
+
+Redis is reserved for fast coordination paths such as rate limiting, short-lived worker presence, scheduler locks, and dashboard metrics caches. Durable job and execution state belongs in PostgreSQL.
 
 ## Local Infrastructure
 
 ```bash
-docker compose up -d postgres rabbitmq
+docker compose up -d postgres rabbitmq redis
 ```

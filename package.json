@@ -2,7 +2,7 @@
   "name": "distributed-job-scheduling-platform",
   "version": "0.1.0",
   "private": true,
-  "description": "Distributed HTTP job scheduling platform built with Node.js, Express, TypeScript, Postgres, RabbitMQ, Prisma, React, and Docker.",
+  "description": "Distributed HTTP job scheduling platform built with Node.js, Express, TypeScript, Postgres, RabbitMQ, Redis, Prisma, React, and Docker.",
   "packageManager": "npm@10.0.0",
   "workspaces": [
     "backend/*",
