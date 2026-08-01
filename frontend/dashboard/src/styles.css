@@ -346,6 +346,12 @@ textarea {
   font-weight: 800;
 }
 
+.metadata-cell {
+  max-width: 260px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+}
+
 .attempt-list {
   display: grid;
   gap: 10px;

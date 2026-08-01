@@ -14,6 +14,18 @@ type AuthResponse = {
   token: string;
 };
 
+type AuditEvent = {
+  id: string;
+  actorType: string;
+  actorLabel?: string | null;
+  action: string;
+  resourceType: string;
+  resourceId?: string | null;
+  requestId?: string | null;
+  metadata?: unknown;
+  createdAt: string;
+};
+
 function App() {
   const [apiBaseUrl, setApiBaseUrl] = React.useState("http://localhost:3000");
   const [apiKey, setApiKey] = React.useState("");
@@ -51,9 +63,10 @@ function App() {
   const [executionStatusFilter, setExecutionStatusFilter] = React.useState("");
   const [workers, setWorkers] = React.useState<unknown[]>([]);
   const [users, setUsers] = React.useState<AuthUser[]>([]);
+  const [auditEvents, setAuditEvents] = React.useState<AuditEvent[]>([]);
   const [metrics, setMetrics] = React.useState<Record<string, unknown>>({});
   const [health, setHealth] = React.useState<Record<string, unknown>>({});
-  const [activeView, setActiveView] = React.useState<"overview" | "jobs" | "executions" | "workers" | "users" | "health">("overview");
+  const [activeView, setActiveView] = React.useState<"overview" | "jobs" | "executions" | "workers" | "users" | "audit" | "health">("overview");
   const [message, setMessage] = React.useState("Ready");
 
   React.useEffect(() => {
@@ -170,6 +183,13 @@ function App() {
     setMessage(`Loaded ${body.data.length} user(s)`);
   }
 
+  async function refreshAuditEvents() {
+    setMessage("Loading audit events");
+    const body = await request<{ data: AuditEvent[] }>("/api/audit-events?limit=50");
+    setAuditEvents(body.data);
+    setMessage(`Loaded ${body.data.length} audit event(s)`);
+  }
+
   async function refreshHealth() {
     setMessage("Loading service health");
     const body = await request<Record<string, unknown>>("/health/services");
@@ -184,6 +204,7 @@ function App() {
       if (activeView === "executions") await refreshExecutions();
       if (activeView === "workers") await refreshWorkers();
       if (activeView === "users") await refreshUsers();
+      if (activeView === "audit") await refreshAuditEvents();
       if (activeView === "health") await refreshHealth();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Request failed");
@@ -321,6 +342,9 @@ function App() {
           </button>
           <button className={activeView === "users" ? "active" : ""} onClick={() => setActiveView("users")}>
             Users
+          </button>
+          <button className={activeView === "audit" ? "active" : ""} onClick={() => setActiveView("audit")}>
+            Audit
           </button>
           <button className={activeView === "health" ? "active" : ""} onClick={() => setActiveView("health")}>
             Health
@@ -551,6 +575,8 @@ function App() {
 
         {activeView === "users" && <UserPanel rows={users} onRoleChange={updateUserRole} />}
 
+        {activeView === "audit" && <AuditPanel rows={auditEvents} />}
+
         {activeView === "health" && (
           <section className="panel">
             <h2>Service Health</h2>
@@ -736,6 +762,44 @@ function UserPanel(props: { rows: AuthUser[]; onRoleChange: (userId: string, rol
                     </select>
                   </td>
                   <td>{user.id}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function AuditPanel(props: { rows: AuditEvent[] }) {
+  return (
+    <section className="panel">
+      <h2>Audit Events</h2>
+      {props.rows.length === 0 ? (
+        <p className="empty-state">No audit events loaded</p>
+      ) : (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Created</th>
+                <th>Actor</th>
+                <th>Action</th>
+                <th>Resource</th>
+                <th>Request</th>
+                <th>Metadata</th>
+              </tr>
+            </thead>
+            <tbody>
+              {props.rows.map((event) => (
+                <tr key={event.id}>
+                  <td>{event.createdAt}</td>
+                  <td>{event.actorLabel ?? event.actorType}</td>
+                  <td>{event.action}</td>
+                  <td>{event.resourceId ? `${event.resourceType}:${event.resourceId}` : event.resourceType}</td>
+                  <td>{event.requestId ?? "-"}</td>
+                  <td className="metadata-cell">{event.metadata ? JSON.stringify(event.metadata) : "-"}</td>
                 </tr>
               ))}
             </tbody>
