@@ -2,6 +2,7 @@ import axios, { AxiosError } from "axios";
 import { PrismaClient } from "@prisma/client";
 import { calculateBackoffDelayMs, getAttemptStatus, getAxiosErrorMessage } from "./execution.js";
 import { normalizeHeaders, previewResponseBody } from "./message.js";
+import { createWorkerState } from "./worker-state.js";
 
 type WorkerRuntimeDependencies = {
   prisma: PrismaClient;
@@ -21,85 +22,10 @@ type RecordAttemptInput = {
 
 export function createWorkerRuntime(deps: WorkerRuntimeDependencies) {
   const { prisma, serviceInstanceId, responsePreviewLimit } = deps;
-  const activeExecutions = new Set<string>();
-  let workerId: string | undefined;
-
-  async function registerWorker() {
-    const worker = await prisma.worker.upsert({
-      where: { serviceInstanceId },
-      create: {
-        serviceInstanceId,
-        status: "IDLE",
-        lastHeartbeatAt: new Date(),
-      },
-      update: {
-        status: "IDLE",
-        lastHeartbeatAt: new Date(),
-        currentExecutionId: null,
-        activeExecutionCount: 0,
-      },
-    });
-
-    workerId = worker.id;
-    return worker;
-  }
-
-  async function heartbeatWorker() {
-    if (!workerId) {
-      return;
-    }
-
-    await prisma.worker.update({
-      where: { id: workerId },
-      data: {
-        lastHeartbeatAt: new Date(),
-        activeExecutionCount: activeExecutions.size,
-        status: activeExecutions.size > 0 ? "BUSY" : "IDLE",
-      },
-    });
-  }
-
-  async function markWorkerBusy(executionId: string) {
-    if (!workerId) {
-      throw new Error("Worker is not registered");
-    }
-
-    activeExecutions.add(executionId);
-
-    await prisma.worker.update({
-      where: { id: workerId },
-      data: {
-        status: "BUSY",
-        currentExecutionId: executionId,
-        activeExecutionCount: activeExecutions.size,
-        lastHeartbeatAt: new Date(),
-      },
-    });
-  }
-
-  async function completeWorkerExecution(executionId: string) {
-    if (!workerId) {
-      return;
-    }
-
-    activeExecutions.delete(executionId);
-    const nextExecutionId = activeExecutions.values().next().value as string | undefined;
-
-    await prisma.worker.update({
-      where: { id: workerId },
-      data: {
-        status: activeExecutions.size > 0 ? "BUSY" : "IDLE",
-        currentExecutionId: nextExecutionId ?? null,
-        activeExecutionCount: activeExecutions.size,
-        lastHeartbeatAt: new Date(),
-      },
-    });
-  }
+  const workerState = createWorkerState({ prisma, serviceInstanceId });
 
   async function recordAttempt(input: RecordAttemptInput) {
-    if (!workerId) {
-      throw new Error("Worker is not registered");
-    }
+    const workerId = workerState.requireWorkerId();
 
     await prisma.$transaction(async (tx) => {
       const execution = await tx.execution.findUnique({
@@ -152,9 +78,7 @@ export function createWorkerRuntime(deps: WorkerRuntimeDependencies) {
   }
 
   async function executeJob(executionId: string) {
-    if (!workerId) {
-      throw new Error("Worker is not registered");
-    }
+    const workerId = workerState.requireWorkerId();
 
     const execution = await prisma.execution.findUnique({
       where: { id: executionId },
@@ -172,7 +96,7 @@ export function createWorkerRuntime(deps: WorkerRuntimeDependencies) {
     }
 
     const startedAt = new Date();
-    await markWorkerBusy(executionId);
+    await workerState.markWorkerBusy(executionId);
 
     const claimed = await prisma.execution.updateMany({
       where: {
@@ -189,7 +113,7 @@ export function createWorkerRuntime(deps: WorkerRuntimeDependencies) {
 
     if (claimed.count === 0) {
       console.warn(`execution ${executionId} could not be claimed`);
-      await completeWorkerExecution(executionId);
+      await workerState.completeWorkerExecution(executionId);
       return;
     }
 
@@ -228,33 +152,15 @@ export function createWorkerRuntime(deps: WorkerRuntimeDependencies) {
         finishedAt,
       });
     } finally {
-      await completeWorkerExecution(executionId);
+      await workerState.completeWorkerExecution(executionId);
     }
-  }
-
-  async function markWorkerOffline() {
-    if (!workerId) {
-      return;
-    }
-
-    await prisma.worker.update({
-      where: { id: workerId },
-      data: { status: "OFFLINE", currentExecutionId: null, activeExecutionCount: 0, lastHeartbeatAt: new Date() },
-    });
-  }
-
-  function getWorkerState() {
-    return {
-      workerId,
-      activeExecutionCount: activeExecutions.size,
-    };
   }
 
   return {
     executeJob,
-    getWorkerState,
-    heartbeatWorker,
-    markWorkerOffline,
-    registerWorker,
+    getWorkerState: workerState.getWorkerState,
+    heartbeatWorker: workerState.heartbeatWorker,
+    markWorkerOffline: workerState.markWorkerOffline,
+    registerWorker: workerState.registerWorker,
   };
 }
