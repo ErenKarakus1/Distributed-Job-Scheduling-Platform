@@ -1,0 +1,169 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum JobType {
+  ONE_TIME
+  RECURRING
+}
+
+enum JobStatus {
+  ACTIVE
+  PAUSED
+  DELETED
+}
+
+enum HttpMethod {
+  GET
+  POST
+  PUT
+  PATCH
+  DELETE
+}
+
+enum BackoffType {
+  FIXED
+  EXPONENTIAL
+}
+
+enum ExecutionStatus {
+  PENDING
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  RETRY_SCHEDULED
+  STALLED
+  CANCELED
+}
+
+enum AttemptStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+  TIMED_OUT
+}
+
+enum WorkerStatus {
+  IDLE
+  BUSY
+  OFFLINE
+}
+
+model ApiKey {
+  id        String   @id @default(uuid())
+  name      String
+  keyHash   String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("api_keys")
+}
+
+model Job {
+  id                  String      @id @default(uuid())
+  name                String
+  type                JobType
+  status              JobStatus   @default(ACTIVE)
+  method              HttpMethod
+  url                 String
+  headers             Json?
+  body                Json?
+  timeoutMs           Int         @default(30000)
+  maxAttempts         Int         @default(3)
+  backoffType         BackoffType @default(EXPONENTIAL)
+  retryInitialDelayMs Int         @default(1000)
+  retryMaxDelayMs     Int         @default(60000)
+  runAt               DateTime?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  schedule   JobSchedule?
+  executions Execution[]
+
+  @@index([status, type])
+  @@index([runAt])
+  @@map("jobs")
+}
+
+model JobSchedule {
+  id             String    @id @default(uuid())
+  jobId          String    @unique
+  cronExpression String
+  timezone       String    @default("UTC")
+  nextRunAt      DateTime
+  lastRunAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([nextRunAt])
+  @@map("job_schedules")
+}
+
+model Execution {
+  id               String          @id @default(uuid())
+  jobId            String
+  status           ExecutionStatus @default(PENDING)
+  attemptCount     Int             @default(0)
+  nextAttemptAt    DateTime?
+  lockedByWorkerId String?
+  lastHeartbeatAt  DateTime?
+  scheduledFor     DateTime
+  startedAt        DateTime?
+  finishedAt       DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  job      Job                @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  worker   Worker?            @relation(fields: [lockedByWorkerId], references: [id])
+  attempts ExecutionAttempt[]
+
+  @@index([status, scheduledFor])
+  @@index([nextAttemptAt])
+  @@index([lockedByWorkerId])
+  @@map("executions")
+}
+
+model ExecutionAttempt {
+  id                  String        @id @default(uuid())
+  executionId         String
+  attemptNumber       Int
+  workerId            String?
+  status              AttemptStatus
+  httpStatusCode      Int?
+  responseBodyPreview String?
+  errorMessage        String?
+  startedAt           DateTime      @default(now())
+  finishedAt          DateTime?
+  durationMs          Int?
+
+  execution Execution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  worker    Worker?   @relation(fields: [workerId], references: [id])
+
+  @@unique([executionId, attemptNumber])
+  @@index([workerId])
+  @@map("execution_attempts")
+}
+
+model Worker {
+  id                 String       @id @default(uuid())
+  serviceInstanceId  String       @unique
+  status             WorkerStatus @default(IDLE)
+  lastHeartbeatAt    DateTime     @default(now())
+  currentExecutionId String?
+  startedAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  executions Execution[]
+  attempts   ExecutionAttempt[]
+
+  @@index([status, lastHeartbeatAt])
+  @@map("workers")
+}
