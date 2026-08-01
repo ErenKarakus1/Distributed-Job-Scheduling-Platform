@@ -1,7 +1,9 @@
-export function OverviewPanel(props: { metrics: Record<string, unknown> }) {
-  const jobs = (props.metrics.jobs ?? {}) as Record<string, unknown>;
-  const executions = (props.metrics.executions ?? {}) as Record<string, unknown>;
-  const workers = (props.metrics.workers ?? {}) as Record<string, unknown>;
+import type { MetricsOverview } from "../types.js";
+
+export function OverviewPanel(props: { metrics: MetricsOverview }) {
+  const jobs = props.metrics.jobs ?? {};
+  const executions = props.metrics.executions ?? {};
+  const workers = props.metrics.workers ?? {};
 
   const cards: Array<[string, unknown]> = [
     ["Active jobs", jobs.active],

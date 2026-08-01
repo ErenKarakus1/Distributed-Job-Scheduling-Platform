@@ -65,6 +65,36 @@ export type WorkerRow = {
   lastHeartbeatAt?: string;
 };
 
+export type MetricsOverview = {
+  jobs?: {
+    total?: number;
+    active?: number;
+    paused?: number;
+  };
+  executions?: {
+    running?: number;
+    queued?: number;
+    retryScheduled?: number;
+    failed?: number;
+    succeeded?: number;
+  };
+  workers?: {
+    active?: number;
+  };
+};
+
+export type ServiceHealthEntry = {
+  statusCode: number;
+  body?: {
+    service?: string;
+    status?: string;
+    [key: string]: unknown;
+  };
+  error?: string;
+};
+
+export type ServiceHealthMap = Record<string, ServiceHealthEntry>;
+
 export type PageState = {
   limit: number;
   offset: number;

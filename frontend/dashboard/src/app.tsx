@@ -2,7 +2,7 @@ import React from "react";
 import { createApiClient } from "./api.js";
 import { parseOptionalJson } from "./json.js";
 import { AuthStrip, type DashboardView, Sidebar, Toolbar } from "./shell.js";
-import type { AuditEvent, AuthResponse, AuthUser, ExecutionRow, JobRow, NewJobFormState, PageResponse, WorkerRow } from "./types.js";
+import type { AuditEvent, AuthResponse, AuthUser, ExecutionRow, JobRow, MetricsOverview, NewJobFormState, PageResponse, ServiceHealthMap, WorkerRow } from "./types.js";
 import { DashboardViews } from "./views.js";
 
 export function App() {
@@ -50,8 +50,8 @@ export function App() {
     resourceId: "",
     limit: 50,
   });
-  const [metrics, setMetrics] = React.useState<Record<string, unknown>>({});
-  const [health, setHealth] = React.useState<Record<string, unknown>>({});
+  const [metrics, setMetrics] = React.useState<MetricsOverview>({});
+  const [health, setHealth] = React.useState<ServiceHealthMap>({});
   const [activeView, setActiveView] = React.useState<DashboardView>("overview");
   const [message, setMessage] = React.useState("Ready");
   const { authRequest, request } = React.useMemo(() => createApiClient({ apiBaseUrl, apiKey, authToken }), [apiBaseUrl, apiKey, authToken]);
@@ -93,7 +93,7 @@ export function App() {
 
   async function refreshMetrics() {
     setMessage("Loading overview");
-    const body = await request<Record<string, unknown>>("/api/metrics/overview");
+    const body = await request<MetricsOverview>("/api/metrics/overview");
     setMetrics(body);
     setMessage("Loaded overview");
   }
@@ -149,7 +149,7 @@ export function App() {
 
   async function refreshHealth() {
     setMessage("Loading service health");
-    const body = await request<Record<string, unknown>>("/health/services");
+    const body = await request<ServiceHealthMap>("/health/services");
     setHealth(body);
     setMessage("Loaded service health");
   }

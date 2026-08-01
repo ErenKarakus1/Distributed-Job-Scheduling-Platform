@@ -1,7 +1,7 @@
 import { AuditPanel, DataPanel, FilterBar, OverviewPanel, Pager, UserPanel, WorkerPanel } from "./components.js";
 import { AuditFilterBar, JobCreateForm } from "./forms.js";
 import type { DashboardView } from "./shell.js";
-import type { AuditEvent, AuditFilters, AuthUser, ExecutionRow, JobRow, NewJobFormState, PageState, WorkerRow } from "./types.js";
+import type { AuditEvent, AuditFilters, AuthUser, ExecutionRow, JobRow, MetricsOverview, NewJobFormState, PageState, ServiceHealthMap, WorkerRow } from "./types.js";
 
 type DashboardViewsProps = {
   activeView: DashboardView;
@@ -10,11 +10,11 @@ type DashboardViewsProps = {
   executionPage: PageState;
   executionStatusFilter: string;
   executions: ExecutionRow[];
-  health: Record<string, unknown>;
+  health: ServiceHealthMap;
   jobPage: PageState;
   jobStatusFilter: string;
   jobs: JobRow[];
-  metrics: Record<string, unknown>;
+  metrics: MetricsOverview;
   newJob: NewJobFormState;
   users: AuthUser[];
   workerPage: PageState;
