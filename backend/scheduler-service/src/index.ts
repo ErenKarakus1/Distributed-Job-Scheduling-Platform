@@ -1,10 +1,10 @@
 import express from "express";
 import amqp from "amqplib";
 import { Prisma, PrismaClient } from "@prisma/client";
-import { ZodError } from "zod";
 import { Redis } from "ioredis";
 import { randomUUID } from "node:crypto";
 import { nextCronRun } from "./cron.js";
+import { requestIdMiddleware, requestLogger, sendValidationError } from "./http.js";
 import { countQueuedExecutions, type SchedulerStats } from "./stats.js";
 import { scheduleRunSchema } from "./validation.js";
 
@@ -23,36 +23,6 @@ const pollIntervalMs = Number(process.env.SCHEDULER_POLL_INTERVAL_MS ?? 5000);
 const batchSize = Number(process.env.SCHEDULER_BATCH_SIZE ?? 50);
 const schedulerLockKey = process.env.SCHEDULER_LOCK_KEY ?? "scheduler:run-lock";
 const schedulerLockTtlMs = Number(process.env.SCHEDULER_LOCK_TTL_MS ?? 30000);
-
-function requestLogger(service: string): express.RequestHandler {
-  return (req, res, next) => {
-    const startedAt = Date.now();
-
-    res.on("finish", () => {
-      console.log(
-        JSON.stringify({
-          level: "info",
-          event: "http_request",
-          service,
-          requestId: res.locals.requestId,
-          method: req.method,
-          path: req.originalUrl,
-          statusCode: res.statusCode,
-          durationMs: Date.now() - startedAt,
-        }),
-      );
-    });
-
-    next();
-  };
-}
-
-function requestIdMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
-  const requestId = req.header("x-request-id")?.trim() || randomUUID();
-  res.locals.requestId = requestId;
-  res.setHeader("x-request-id", requestId);
-  next();
-}
 
 app.use(requestIdMiddleware);
 app.use(requestLogger("scheduler-service"));
@@ -309,10 +279,7 @@ app.post("/schedule/run", async (req, res, next) => {
 
     res.json(result.stats);
   } catch (error) {
-    if (error instanceof ZodError) {
-      res.status(400).json({ error: "Validation failed", issues: error.issues });
-      return;
-    }
+    if (sendValidationError(res, error)) return;
 
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       res.status(409).json({ error: "Scheduling conflict", code: error.code });
