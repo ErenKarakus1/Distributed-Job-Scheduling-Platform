@@ -22,6 +22,8 @@ function App() {
   });
   const [jobs, setJobs] = React.useState<unknown[]>([]);
   const [executions, setExecutions] = React.useState<unknown[]>([]);
+  const [jobPage, setJobPage] = React.useState({ limit: 25, offset: 0, total: 0 });
+  const [executionPage, setExecutionPage] = React.useState({ limit: 25, offset: 0, total: 0 });
   const [jobStatusFilter, setJobStatusFilter] = React.useState("");
   const [executionStatusFilter, setExecutionStatusFilter] = React.useState("");
   const [workers, setWorkers] = React.useState<unknown[]>([]);
@@ -49,11 +51,17 @@ function App() {
     return body;
   }
 
-  async function refreshJobs() {
+  async function refreshJobs(page = jobPage) {
     setMessage("Loading jobs");
-    const query = jobStatusFilter ? `?status=${encodeURIComponent(jobStatusFilter)}` : "";
-    const body = await request<{ data: unknown[] }>(`/api/jobs${query}`);
+    const params = new URLSearchParams({
+      limit: String(page.limit),
+      offset: String(page.offset),
+    });
+    if (jobStatusFilter) params.set("status", jobStatusFilter);
+
+    const body = await request<{ data: unknown[]; page: { limit: number; offset: number; total: number } }>(`/api/jobs?${params}`);
     setJobs(body.data);
+    setJobPage(body.page);
     setMessage(`Loaded ${body.data.length} job(s)`);
   }
 
@@ -64,11 +72,17 @@ function App() {
     setMessage("Loaded overview");
   }
 
-  async function refreshExecutions() {
+  async function refreshExecutions(page = executionPage) {
     setMessage("Loading executions");
-    const query = executionStatusFilter ? `?status=${encodeURIComponent(executionStatusFilter)}` : "";
-    const body = await request<{ data: unknown[] }>(`/api/executions${query}`);
+    const params = new URLSearchParams({
+      limit: String(page.limit),
+      offset: String(page.offset),
+    });
+    if (executionStatusFilter) params.set("status", executionStatusFilter);
+
+    const body = await request<{ data: unknown[]; page: { limit: number; offset: number; total: number } }>(`/api/executions?${params}`);
     setExecutions(body.data);
+    setExecutionPage(body.page);
     setMessage(`Loaded ${body.data.length} execution(s)`);
   }
 
@@ -322,9 +336,14 @@ function App() {
               value={jobStatusFilter}
               options={["ACTIVE", "PAUSED", "DELETED"]}
               onChange={setJobStatusFilter}
-              onApply={() => void refreshJobs()}
+              onApply={() => {
+                const nextPage = { ...jobPage, offset: 0 };
+                setJobPage(nextPage);
+                void refreshJobs(nextPage);
+              }}
             />
             <DataPanel title="Jobs" rows={jobs} emptyText="No jobs loaded" onJobAction={runJobAction} />
+            <Pager page={jobPage} onChange={setJobPage} onApply={(page) => void refreshJobs(page)} />
           </>
         )}
 
@@ -335,9 +354,14 @@ function App() {
               value={executionStatusFilter}
               options={["PENDING", "QUEUED", "RUNNING", "SUCCEEDED", "FAILED", "RETRY_SCHEDULED", "STALLED", "CANCELED"]}
               onChange={setExecutionStatusFilter}
-              onApply={() => void refreshExecutions()}
+              onApply={() => {
+                const nextPage = { ...executionPage, offset: 0 };
+                setExecutionPage(nextPage);
+                void refreshExecutions(nextPage);
+              }}
             />
             <DataPanel title="Executions" rows={executions} emptyText="No executions loaded" expandableAttempts onExecutionAction={runExecutionAction} />
+            <Pager page={executionPage} onChange={setExecutionPage} onApply={(page) => void refreshExecutions(page)} />
           </>
         )}
 
@@ -353,6 +377,44 @@ function App() {
         )}
       </section>
     </main>
+  );
+}
+
+function Pager(props: {
+  page: { limit: number; offset: number; total: number };
+  onChange: (page: { limit: number; offset: number; total: number }) => void;
+  onApply: (page: { limit: number; offset: number; total: number }) => void;
+}) {
+  const currentEnd = Math.min(props.page.offset + props.page.limit, props.page.total);
+  const canGoBack = props.page.offset > 0;
+  const canGoNext = props.page.offset + props.page.limit < props.page.total;
+
+  return (
+    <section className="pager">
+      <span>
+        {props.page.total === 0 ? "0" : props.page.offset + 1}-{currentEnd} of {props.page.total}
+      </span>
+      <button
+        disabled={!canGoBack}
+        onClick={() => {
+          const nextPage = { ...props.page, offset: Math.max(props.page.offset - props.page.limit, 0) };
+          props.onChange(nextPage);
+          props.onApply(nextPage);
+        }}
+      >
+        Prev
+      </button>
+      <button
+        disabled={!canGoNext}
+        onClick={() => {
+          const nextPage = { ...props.page, offset: props.page.offset + props.page.limit };
+          props.onChange(nextPage);
+          props.onApply(nextPage);
+        }}
+      >
+        Next
+      </button>
+    </section>
   );
 }
 

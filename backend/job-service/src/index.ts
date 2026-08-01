@@ -13,6 +13,10 @@ const httpMethodSchema = z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]);
 const jobTypeSchema = z.enum(["ONE_TIME", "RECURRING"]);
 const jobStatusSchema = z.enum(["ACTIVE", "PAUSED", "DELETED"]);
 const backoffTypeSchema = z.enum(["FIXED", "EXPONENTIAL"]);
+const paginationSchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+  offset: z.coerce.number().int().min(0).default(0),
+});
 
 const jsonValueSchema = z.unknown().transform((value) => value as Prisma.InputJsonValue);
 
@@ -157,15 +161,21 @@ app.post("/jobs", async (req, res, next) => {
 app.get("/jobs", async (req, res, next) => {
   try {
     const status = req.query.status ? jobStatusSchema.parse(req.query.status) : undefined;
+    const pagination = paginationSchema.parse(req.query);
 
-    const jobs = await prisma.job.findMany({
-      where: { status },
-      include: { schedule: true },
-      orderBy: { createdAt: "desc" },
-      take: 100,
-    });
+    const where = { status };
+    const [jobs, total] = await Promise.all([
+      prisma.job.findMany({
+        where,
+        include: { schedule: true },
+        orderBy: { createdAt: "desc" },
+        take: pagination.limit,
+        skip: pagination.offset,
+      }),
+      prisma.job.count({ where }),
+    ]);
 
-    res.json({ data: jobs });
+    res.json({ data: jobs, page: { ...pagination, total } });
   } catch (error) {
     if (!sendValidationError(res, error)) next(error);
   }

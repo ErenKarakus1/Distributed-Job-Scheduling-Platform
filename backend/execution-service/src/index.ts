@@ -22,6 +22,10 @@ const executionStatusSchema = z.enum([
   "STALLED",
   "CANCELED",
 ]);
+const paginationSchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+  offset: z.coerce.number().int().min(0).default(0),
+});
 
 const attemptStatusSchema = z.enum(["RUNNING", "SUCCEEDED", "FAILED", "TIMED_OUT"]);
 
@@ -205,15 +209,21 @@ app.get("/executions", async (req, res, next) => {
   try {
     const status = req.query.status ? executionStatusSchema.parse(req.query.status) : undefined;
     const jobId = req.query.jobId ? parseId(String(req.query.jobId)) : undefined;
+    const pagination = paginationSchema.parse(req.query);
 
-    const executions = await prisma.execution.findMany({
-      where: { status, jobId },
-      include: { job: true, attempts: true },
-      orderBy: { createdAt: "desc" },
-      take: 100,
-    });
+    const where = { status, jobId };
+    const [executions, total] = await Promise.all([
+      prisma.execution.findMany({
+        where,
+        include: { job: true, attempts: true },
+        orderBy: { createdAt: "desc" },
+        take: pagination.limit,
+        skip: pagination.offset,
+      }),
+      prisma.execution.count({ where }),
+    ]);
 
-    res.json({ data: executions });
+    res.json({ data: executions, page: { ...pagination, total } });
   } catch (error) {
     if (!sendValidationError(res, error)) next(error);
   }
