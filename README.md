@@ -1,60 +1,452 @@
 # Distributed Job Scheduling Platform
 
-A microservices-based platform for creating one-time and recurring HTTP jobs, executing them across distributed workers, retrying failures, recovering stalled executions, and monitoring execution history.
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+![Node.js](https://img.shields.io/badge/Node.js-22-green.svg)
+![Express](https://img.shields.io/badge/Express-5-black.svg)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-blue.svg)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue.svg)
+![RabbitMQ](https://img.shields.io/badge/RabbitMQ-3.13-orange.svg)
+![Redis](https://img.shields.io/badge/Redis-7-red.svg)
+![Docker](https://img.shields.io/badge/Docker-Compose-blue.svg)
 
-## Planned Stack
+A microservices-based distributed HTTP job scheduling platform for creating one-time and recurring jobs, executing them across workers, retrying failures, recovering stalled executions, and monitoring execution history through an API and web dashboard.
+
+Developers can create HTTP jobs, schedule future or recurring runs, inspect attempts and response metadata, manually retry failed executions, recover stalled work, manage dashboard users, authenticate with JWTs or API keys, and run the full platform locally with Docker Compose.
+
+## Tech Stack
+
+### Backend
 
 - Node.js
 - Express
 - TypeScript
+- Zod
+- Axios
+- Prisma
 - PostgreSQL
 - RabbitMQ
 - Redis
-- Axios
-- Zod
-- Prisma
-- React + Vite
+
+### Frontend
+
+- React
+- TypeScript
+- Vite
+- CSS
+
+### Infrastructure
+
 - Docker
+- Docker Compose
+- Nginx for the dashboard container
 
-## Services
+## Features
 
-- `backend/api-gateway`: public API entry point and dashboard aggregation
-- `backend/job-service`: job definitions and schedules
-- `backend/execution-service`: execution lifecycle, attempts, retries, and recovery state
-- `backend/scheduler-service`: due job discovery and queue publishing
-- `backend/worker-service`: HTTP execution workers
-- `frontend/dashboard`: React web dashboard
+- Express microservices architecture
+- One-time HTTP jobs
+- Recurring cron-based HTTP jobs
+- Manual job runs
+- Job pause, resume, update, and delete operations
+- Distributed execution through RabbitMQ
+- Worker concurrency configuration
+- HTTP execution attempts with status, duration, response code, response body preview, and error details
+- Automatic retry with fixed or exponential backoff
+- Retry delay caps
+- Manual execution retry
+- Stalled execution heartbeat recovery
+- Worker registry and worker health reporting
+- Execution history and pagination
+- Dashboard metrics overview
+- Audit event timeline
+- JWT dashboard authentication
+- API key authentication for developer/API access
+- Admin and viewer roles
+- Admin bootstrap command for Docker and local setup
+- Redis-backed API rate limiting
+- PostgreSQL persistence with Prisma
+- Squashed initial Prisma migration
+- React dashboard for jobs, executions, workers, metrics, and audit events
+- Dockerized local platform stack
+- Backend unit tests and TypeScript checks
 
-## Repository Layout
+## How It Works
 
-- `backend/`: Express microservices and backend shared packages
-- `frontend/`: React + Vite applications
-- `docker-compose.yml`: local PostgreSQL, RabbitMQ, and Redis infrastructure
+Jobs are stored durably in PostgreSQL. A job can be either:
 
-## Redis Usage
+- `ONE_TIME` - runs once at a configured `runAt` time
+- `RECURRING` - runs repeatedly from a cron expression and timezone
 
-Redis is reserved for fast coordination paths such as rate limiting, short-lived worker presence, scheduler locks, and dashboard metrics caches. Durable job and execution state belongs in PostgreSQL.
+The scheduler service scans for due jobs and creates execution records. Runnable executions are published to RabbitMQ through the `execution.ready` queue.
 
-## Local Infrastructure
+Worker instances consume queued execution messages, mark executions as running, send heartbeat updates while work is active, perform the configured HTTP request with Axios, and record the attempt result.
+
+If a job fails and has retry attempts remaining, the execution service schedules the next attempt using the job's backoff settings. If an execution stops heartbeating for too long, stalled recovery can move it back to a retryable state or fail it when no attempts remain.
+
+## Retry and Recovery
+
+Retries are controlled per job.
+
+Retry configuration includes:
+
+- `maxAttempts`
+- `retryDelayMs`
+- `retryMaxDelayMs`
+- `backoffType`
+
+Supported backoff types:
+
+- `FIXED`
+- `EXPONENTIAL`
+
+The worker records failed, timed-out, and successful attempts. The execution service decides whether another attempt should be queued, delayed, or whether the execution should become terminal.
+
+Stalled recovery uses worker heartbeats. If an execution is `RUNNING` but its heartbeat is older than the configured stalled threshold, recovery can mark it for retry or fail it when retry attempts are exhausted.
+
+## Authentication and Authorization
+
+The API gateway supports two authentication methods for `/api/*` routes.
+
+### JWT
+
+Dashboard users authenticate with email and password. Login returns a JWT that the dashboard stores locally and sends as a bearer token.
+
+JWT roles:
+
+- `ADMIN` - can read and mutate jobs, executions, scheduling, recovery, users, and API keys
+- `VIEWER` - can read dashboard data
+
+### API Keys
+
+API keys are intended for developer and service access. A valid API key can call protected API routes through the `x-api-key` header.
+
+The gateway hashes API keys before storing them. Plain API key values are only returned when the key is created.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    User[User or Developer] --> Dashboard[React Dashboard]
+    User --> Client[HTTP Client]
+
+    Dashboard -->|JWT| Gateway[API Gateway]
+    Client -->|API Key or JWT| Gateway
+
+    Gateway --> Jobs[Job Service]
+    Gateway --> Executions[Execution Service]
+    Gateway --> Scheduler[Scheduler Service]
+    Gateway --> Workers[Worker Service]
+
+    Gateway <--> Redis[(Redis Rate Limits)]
+
+    Jobs --> Postgres[(PostgreSQL)]
+    Executions --> Postgres
+    Scheduler --> Postgres
+    Workers --> Postgres
+    Gateway --> Postgres
+
+    Scheduler -->|Publish due executions| RabbitMQ[(RabbitMQ)]
+    RabbitMQ -->|execution.ready| Workers
+    Workers -->|HTTP request| Target[External HTTP Endpoint]
+    Workers --> Executions
+
+    Executions -->|Retry or recover| RabbitMQ
+```
+
+## Project Structure
+
+```text
+backend/
+  api-gateway/
+    src/
+      auth/              JWT, users, API keys, and admin bootstrap
+      audit-routes.ts    Audit event API
+      proxy-routes.ts    Public API proxy routes
+  job-service/
+    src/
+      command-routes.ts  Job mutations and manual runs
+      read-routes.ts     Job reads
+      validation.ts      Job schemas
+  execution-service/
+    src/
+      command-routes.ts  Execution state changes, attempts, retry, recovery
+      read-routes.ts     Executions, workers, and metrics
+      recovery.ts        Stalled execution recovery rules
+      retry.ts           Retry delay and backoff rules
+  scheduler-service/
+    src/
+      scheduler.ts       Due job discovery and queue publishing
+      cron.ts            Recurring schedule calculation
+      stats.ts           Queue statistics
+  worker-service/
+    src/
+      worker.ts          RabbitMQ consumer
+      execution.ts       HTTP execution and attempt handling
+      worker-state.ts    Worker presence and heartbeat state
+  packages/
+    database/
+      prisma/            Prisma schema and migration
+      src/               Shared Prisma client
+frontend/
+  dashboard/
+    src/
+      api/               Dashboard API client and request builders
+      components/        Shared dashboard panels and controls
+      state/             Dashboard state helpers
+      app.tsx            Main dashboard application
+docker-compose.yml       Full local platform stack
+```
+
+## Requirements
+
+### Docker Setup
+
+- Docker
+- Docker Compose
+
+### Local Development
+
+- Node.js 22 or newer
+- npm
+- Docker, or locally installed PostgreSQL, RabbitMQ, and Redis
+
+## Run with Docker
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/ErenKarakus1/Distributed-Job-Scheduling-Platform.git
+cd Distributed-Job-Scheduling-Platform
+```
+
+### 2. Optional: configure local secrets
+
+Docker Compose provides local defaults, including an admin user.
+
+For a custom admin account, create a root-level `.env` file or set these values in your shell:
+
+```env
+ADMIN_EMAIL="admin@example.com"
+ADMIN_NAME="Platform Admin"
+ADMIN_PASSWORD="change-me-admin-password"
+JWT_SECRET="change-me-in-docker"
+```
+
+Use stronger values before deploying anywhere outside local development.
+
+### 3. Start the application
+
+```bash
+docker compose up --build
+```
+
+Open:
+
+- Dashboard: http://localhost:8080
+- API Gateway: http://localhost:3000
+- API health check: http://localhost:3000/health
+- Service health check: http://localhost:3000/health/services
+- RabbitMQ management: http://localhost:15672
+
+Default RabbitMQ credentials:
+
+```text
+scheduler / scheduler
+```
+
+Docker Compose starts:
+
+- `dashboard` - React dashboard served by Nginx
+- `api-gateway` - public API, auth, rate limiting, and service aggregation
+- `job-service` - job definitions and schedules
+- `execution-service` - execution lifecycle, attempts, retry, recovery, workers, and metrics
+- `scheduler-service` - due job discovery and RabbitMQ publishing
+- `worker-service` - distributed HTTP executor
+- `migrations` - Prisma migration deployment
+- `admin-bootstrap` - local admin user creation
+- `postgres` - durable platform database
+- `rabbitmq` - execution queue and management UI
+- `redis` - rate-limit store and fast coordination dependency
+
+### View running services
+
+```bash
+docker compose ps
+```
+
+### View logs
+
+```bash
+docker compose logs -f api-gateway
+docker compose logs -f job-service
+docker compose logs -f execution-service
+docker compose logs -f scheduler-service
+docker compose logs -f worker-service
+docker compose logs -f dashboard
+```
+
+### Stop the application
+
+```bash
+docker compose down
+```
+
+### Stop the application and remove stored data
+
+```bash
+docker compose down -v
+```
+
+This removes the PostgreSQL volume created by Docker Compose.
+
+## Environment Configuration
+
+The environment template is located at:
+
+```text
+.env.example
+```
+
+Create your local configuration at:
+
+```text
+.env
+```
+
+Docker Compose sets container-safe defaults in `docker-compose.yml`. For local development outside Docker, `.env.example` uses host-accessible URLs.
+
+### Application configuration
+
+```env
+NODE_ENV=development
+```
+
+### Database configuration
+
+```env
+DATABASE_URL=postgresql://scheduler:scheduler@localhost:5432/scheduler
+```
+
+When services run through Docker Compose, this becomes:
+
+```text
+postgresql://scheduler:scheduler@postgres:5432/scheduler
+```
+
+### RabbitMQ configuration
+
+```env
+RABBITMQ_URL=amqp://scheduler:scheduler@localhost:5672
+EXECUTION_READY_QUEUE=execution.ready
+EXECUTION_DEAD_LETTER_EXCHANGE=execution.dead
+EXECUTION_DEAD_LETTER_QUEUE=execution.dead
+```
+
+When services run through Docker Compose, RabbitMQ is reached at:
+
+```text
+amqp://scheduler:scheduler@rabbitmq:5672
+```
+
+Malformed execution messages are rejected into the dead-letter queue.
+
+### Redis configuration
+
+```env
+REDIS_URL=redis://localhost:6379
+API_RATE_LIMIT_WINDOW_MS=60000
+API_RATE_LIMIT_MAX_REQUESTS=120
+```
+
+Set `API_RATE_LIMIT_MAX_REQUESTS=0` to disable the API limiter during local experiments.
+
+### Authentication configuration
+
+```env
+JWT_SECRET=change-me-in-development
+JWT_EXPIRES_IN=8h
+ADMIN_EMAIL=admin@example.com
+ADMIN_NAME=Platform Admin
+ADMIN_PASSWORD=change-me-admin-password
+```
+
+The example JWT secret and admin password are intended only for local development.
+
+### Service ports
+
+```env
+API_GATEWAY_PORT=3000
+JOB_SERVICE_PORT=3001
+EXECUTION_SERVICE_PORT=3002
+SCHEDULER_SERVICE_PORT=3003
+WORKER_SERVICE_PORT=3004
+CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+```
+
+### Worker and scheduler configuration
+
+```env
+WORKER_CONCURRENCY=1
+SCHEDULER_POLL_INTERVAL_MS=5000
+SCHEDULER_BATCH_SIZE=50
+EXECUTION_STALLED_AFTER_MS=60000
+EXECUTION_RECOVERY_INTERVAL_MS=15000
+EXECUTION_RECOVERY_BATCH_SIZE=50
+```
+
+Do not commit `.env` or any real API keys, JWT secrets, database passwords, access tokens, or production secrets.
+
+## Local Development
+
+The recommended local-development setup runs PostgreSQL, RabbitMQ, and Redis through Docker while the Node.js services and dashboard run directly on your machine.
+
+### 1. Start infrastructure
 
 ```bash
 docker compose up -d postgres rabbitmq redis
 ```
 
-Docker Compose is currently used for local infrastructure only. Application service Dockerfiles will be added after the core platform is complete.
-
-## Setup
+### 2. Install dependencies
 
 ```bash
 npm install
-copy .env.example .env
+```
+
+### 3. Create the environment file
+
+Linux and macOS:
+
+```bash
+cp .env.example .env
+```
+
+Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+### 4. Generate Prisma client and run migrations
+
+```bash
 npm run db:generate
 npm run db:migrate
 ```
 
-## Development
+For production-style migration deployment:
 
-Run the backend services in separate terminals:
+```bash
+npm run db:deploy
+```
+
+### 5. Bootstrap an admin user
+
+```bash
+npm run bootstrap:admin
+```
+
+### 6. Start backend services
+
+Run each service in a separate terminal:
 
 ```bash
 npm run dev:job-service
@@ -64,137 +456,293 @@ npm run dev:worker-service
 npm run dev:api-gateway
 ```
 
-Run the dashboard:
+### 7. Start the dashboard
 
 ```bash
 npm run dev:dashboard
 ```
 
-Default ports:
+Open:
 
-- API Gateway: `3000`
-- Job Service: `3001`
-- Execution Service: `3002`
-- Scheduler Service: `3003`
-- Worker Service: `3004`
-- Dashboard: `5173`
+- Dashboard: http://localhost:5173
+- API Gateway: http://localhost:3000
+- Health check: http://localhost:3000/health
+- RabbitMQ management: http://localhost:15672
 
-Worker concurrency defaults to `1`. Increase `WORKER_CONCURRENCY` to let a worker instance process multiple queued executions at the same time.
+## API Examples
 
-RabbitMQ uses `EXECUTION_READY_QUEUE` for runnable executions and sends rejected malformed messages to `EXECUTION_DEAD_LETTER_QUEUE` through `EXECUTION_DEAD_LETTER_EXCHANGE`.
-
-The API gateway rate-limits `/api/*` requests through Redis. Tune `API_RATE_LIMIT_MAX_REQUESTS` and `API_RATE_LIMIT_WINDOW_MS`, or set the max requests to `0` to disable the limiter locally.
-
-## API Keys
-
-In development, create an API key through the gateway:
+### Register and login
 
 ```bash
-curl -X POST http://localhost:3000/internal/api-keys ^
-  -H "content-type: application/json" ^
-  -d "{\"name\":\"local-dev\"}"
+curl -X POST http://localhost:3000/auth/register \
+  -H "content-type: application/json" \
+  -d '{"email":"admin@example.com","name":"Admin","password":"password123"}'
 ```
 
-Use the returned key in requests:
-
 ```bash
-curl http://localhost:3000/api/jobs ^
-  -H "x-api-key: djsp_your_key"
+curl -X POST http://localhost:3000/auth/login \
+  -H "content-type: application/json" \
+  -d '{"email":"admin@example.com","password":"password123"}'
 ```
 
-The gateway also accepts dashboard JWTs on `/api/*` routes:
+Use the returned token:
 
 ```bash
-curl http://localhost:3000/api/jobs ^
+curl http://localhost:3000/api/jobs \
   -H "authorization: Bearer YOUR_JWT"
 ```
 
-JWT users with the `VIEWER` role can read dashboard data. Mutating API routes require an `ADMIN` JWT or an API key.
-
-Recent audit events are available through the gateway:
+### Create an API key
 
 ```bash
-curl http://localhost:3000/api/audit-events ^
-  -H "authorization: Bearer YOUR_JWT"
+curl -X POST http://localhost:3000/internal/api-keys \
+  -H "content-type: application/json" \
+  -d '{"name":"local-dev"}'
 ```
 
-Audit events can be filtered with `actorType`, `actorId`, `action`, `resourceType`, `resourceId`, and `limit`.
-
-List development API keys:
+Use the returned key:
 
 ```bash
-curl http://localhost:3000/internal/api-keys
-```
-
-Revoke a development API key:
-
-```bash
-curl -X DELETE http://localhost:3000/internal/api-keys/API_KEY_ID
-```
-
-## Dashboard JWT Auth
-
-In development, create a dashboard user:
-
-```bash
-curl -X POST http://localhost:3000/auth/register ^
-  -H "content-type: application/json" ^
-  -d "{\"email\":\"admin@example.com\",\"name\":\"Admin\",\"password\":\"password123\"}"
-```
-
-Login returns a JWT:
-
-```bash
-curl -X POST http://localhost:3000/auth/login ^
-  -H "content-type: application/json" ^
-  -d "{\"email\":\"admin@example.com\",\"password\":\"password123\"}"
-```
-
-List development users:
-
-```bash
-curl http://localhost:3000/internal/users
-```
-
-Update a development user's role:
-
-```bash
-curl -X PATCH http://localhost:3000/internal/users/USER_ID/role ^
-  -H "content-type: application/json" ^
-  -d "{\"role\":\"VIEWER\"}"
-```
-
-## Example Job
-
-Create a one-time HTTP job:
-
-```bash
-curl -X POST http://localhost:3000/api/jobs ^
-  -H "content-type: application/json" ^
-  -H "x-api-key: djsp_your_key" ^
-  -d "{\"name\":\"Ping example\",\"type\":\"ONE_TIME\",\"method\":\"POST\",\"url\":\"https://httpbin.org/post\",\"runAt\":\"2026-08-02T12:00:00.000Z\"}"
-```
-
-Create a recurring HTTP job:
-
-```bash
-curl -X POST http://localhost:3000/api/jobs ^
-  -H "content-type: application/json" ^
-  -H "x-api-key: djsp_your_key" ^
-  -d "{\"name\":\"Recurring ping\",\"type\":\"RECURRING\",\"method\":\"GET\",\"url\":\"https://httpbin.org/get\",\"schedule\":{\"cronExpression\":\"*/5 * * * *\",\"timezone\":\"UTC\",\"nextRunAt\":\"2026-08-02T12:00:00.000Z\"}}"
-```
-
-Manually run a job:
-
-```bash
-curl -X POST http://localhost:3000/api/jobs/JOB_ID/run ^
+curl http://localhost:3000/api/jobs \
   -H "x-api-key: djsp_your_key"
 ```
 
-## Verification
+### Create a one-time job
+
+```bash
+curl -X POST http://localhost:3000/api/jobs \
+  -H "content-type: application/json" \
+  -H "x-api-key: djsp_your_key" \
+  -d '{
+    "name": "Ping example",
+    "type": "ONE_TIME",
+    "method": "POST",
+    "url": "https://httpbin.org/post",
+    "runAt": "2026-08-02T12:00:00.000Z",
+    "maxAttempts": 3,
+    "retryDelayMs": 1000,
+    "retryMaxDelayMs": 30000,
+    "backoffType": "EXPONENTIAL"
+  }'
+```
+
+### Create a recurring job
+
+```bash
+curl -X POST http://localhost:3000/api/jobs \
+  -H "content-type: application/json" \
+  -H "x-api-key: djsp_your_key" \
+  -d '{
+    "name": "Recurring ping",
+    "type": "RECURRING",
+    "method": "GET",
+    "url": "https://httpbin.org/get",
+    "schedule": {
+      "cronExpression": "*/5 * * * *",
+      "timezone": "UTC",
+      "nextRunAt": "2026-08-02T12:00:00.000Z"
+    }
+  }'
+```
+
+### Manually run a job
+
+```bash
+curl -X POST http://localhost:3000/api/jobs/JOB_ID/run \
+  -H "x-api-key: djsp_your_key"
+```
+
+### Retry an execution
+
+```bash
+curl -X POST http://localhost:3000/api/executions/EXECUTION_ID/retry \
+  -H "x-api-key: djsp_your_key"
+```
+
+### Recover stalled executions
+
+```bash
+curl -X POST http://localhost:3000/api/recover/stalled \
+  -H "x-api-key: djsp_your_key"
+```
+
+### Run the scheduler once
+
+```bash
+curl -X POST http://localhost:3000/api/schedule/run \
+  -H "x-api-key: djsp_your_key"
+```
+
+## Main API Routes
+
+### Auth
+
+- `POST /auth/register`
+- `POST /auth/login`
+- `GET /auth/me`
+
+### Jobs
+
+- `GET /api/jobs`
+- `POST /api/jobs`
+- `GET /api/jobs/:id`
+- `PATCH /api/jobs/:id`
+- `DELETE /api/jobs/:id`
+- `POST /api/jobs/:id/run`
+- `POST /api/jobs/:id/pause`
+- `POST /api/jobs/:id/resume`
+
+### Executions
+
+- `GET /api/executions`
+- `POST /api/executions`
+- `GET /api/executions/:id`
+- `POST /api/executions/:id/cancel`
+- `POST /api/executions/:id/retry`
+
+### Operations and Monitoring
+
+- `GET /api/workers`
+- `GET /api/metrics/overview`
+- `GET /api/audit-events`
+- `POST /api/schedule/run`
+- `POST /api/recover/stalled`
+- `GET /health`
+- `GET /health/services`
+
+### Development Admin Routes
+
+- `POST /internal/api-keys`
+- `GET /internal/api-keys`
+- `DELETE /internal/api-keys/:id`
+- `GET /internal/users`
+- `PATCH /internal/users/:id/role`
+
+## Tests and Checks
+
+Run all backend tests:
 
 ```bash
 npm test
+```
+
+Run TypeScript checks across all workspaces:
+
+```bash
 npm run typecheck
+```
+
+Build all workspaces:
+
+```bash
+npm run build
+```
+
+Build only the dashboard:
+
+```bash
 npm run build -w @scheduler/dashboard
 ```
+
+Generate Prisma client:
+
+```bash
+npm run db:generate
+```
+
+Validate Docker Compose configuration:
+
+```bash
+docker compose config
+```
+
+## Testing Retries
+
+To test retry behavior:
+
+1. Create a job that targets an endpoint returning a `500` response.
+2. Set `maxAttempts` greater than `1`.
+3. Use `FIXED` or `EXPONENTIAL` backoff.
+4. Run the scheduler or manually run the job.
+5. Inspect `/api/executions/:id` and the dashboard execution history.
+
+Each failed HTTP call should create an attempt record. The execution should retry until it succeeds or reaches the configured maximum attempt count.
+
+## Testing Stalled Recovery
+
+To test stalled recovery:
+
+1. Start the Docker stack.
+2. Create and run a job.
+3. Stop the worker while an execution is running.
+4. Wait longer than `EXECUTION_STALLED_AFTER_MS`.
+5. Call `POST /api/recover/stalled` or wait for the recovery loop.
+6. Confirm that the execution is retried or failed based on remaining attempts.
+
+## Design Decisions
+
+### Microservices
+
+The backend is split by responsibility: gateway, jobs, executions, scheduler, and workers. This keeps scheduling, execution state, and HTTP work isolated while still allowing the dashboard to use one API gateway.
+
+### PostgreSQL and Prisma
+
+Jobs, schedules, executions, attempts, workers, users, API keys, and audit events are relational and queryable. PostgreSQL with Prisma keeps those relationships explicit and provides a migration workflow.
+
+### RabbitMQ
+
+RabbitMQ handles runnable execution delivery to distributed workers. Workers can scale horizontally by adding more consumers to the same queue.
+
+### Redis
+
+Redis is used for fast coordination paths such as API rate limiting. Durable platform state remains in PostgreSQL.
+
+### JWT and API Keys
+
+JWTs are used for dashboard sessions and role-aware access. API keys are used for developer and service-to-service access where a long-lived credential is more convenient than an interactive login.
+
+### Retry and Recovery
+
+Retries are stored as part of execution state instead of being hidden inside worker memory. That makes retry behavior inspectable and recoverable after service restarts.
+
+## Known Limitations
+
+- Docker Compose is intended for local development and demonstration, not hardened production deployment.
+- JWTs are stored by the dashboard in browser local storage. A production deployment could move refresh/session handling to HttpOnly cookies.
+- Rate limiting uses a fixed-window Redis counter.
+- Service-to-service calls inside the Docker network are trusted by local Compose configuration.
+- The dashboard uses production-build checks but does not yet include a frontend test suite.
+- There is no OpenAPI document yet.
+- Cron scheduling depends on the scheduler service polling interval.
+- RabbitMQ and PostgreSQL are exposed on localhost for local development convenience.
+
+## Security Notes
+
+- Never commit `.env`.
+- Never commit real API keys, JWTs, database URLs, passwords, RabbitMQ credentials, or production secrets.
+- Replace `JWT_SECRET` before deployment.
+- Replace the default admin password before deployment.
+- Restrict production CORS origins.
+- Use strong database and RabbitMQ credentials in production.
+- Do not expose PostgreSQL, RabbitMQ, or Redis publicly.
+- Use TLS for deployed services.
+- Treat the included Docker Compose configuration as a local-development setup.
+
+## Possible Future Improvements
+
+- GitHub Actions continuous integration
+- OpenAPI specification
+- Frontend component and integration tests
+- Refresh-token flow with HttpOnly cookies
+- Multi-tenant organizations
+- Per-job execution timeout controls in the dashboard
+- Worker autoscaling notes
+- Metrics export for Prometheus
+- Structured tracing across services
+- Webhook signing for outgoing HTTP jobs
+- Dead-letter queue dashboard view
+- Production deployment manifests
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
