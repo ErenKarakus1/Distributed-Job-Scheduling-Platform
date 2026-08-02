@@ -1,10 +1,26 @@
 import React from "react";
 import { createApiClient } from "./api/client.js";
-import { createAuditParams, createJobRequestBody, createPageParams } from "./api/dashboard-requests.js";
-import { AuthStrip, type DashboardView, Sidebar, Toolbar } from "./layouts/dashboard-shell.js";
+import {
+  createAuditParams,
+  createJobRequestBody,
+  createPageParams,
+} from "./api/dashboard-requests.js";
+import {
+  AuthStrip,
+  type DashboardView,
+  Sidebar,
+  Toolbar,
+} from "./layouts/dashboard-shell.js";
 import { AuthPage } from "./pages/auth-page.js";
 import { DashboardViews } from "./pages/dashboard-views.js";
-import { AUTH_TOKEN_STORAGE_KEY, createDefaultAuditFilters, createDefaultJobForm, createEmptyAuthForm, createJobFormFromRow, DEFAULT_PAGE_STATE } from "./state/dashboard-state.js";
+import {
+  AUTH_TOKEN_STORAGE_KEY,
+  createDefaultAuditFilters,
+  createDefaultJobForm,
+  createEmptyAuthForm,
+  createJobFormFromRow,
+  DEFAULT_PAGE_STATE,
+} from "./state/dashboard-state.js";
 import type {
   ApiKeyRow,
   AuditEvent,
@@ -23,39 +39,53 @@ import type {
   WorkerRow,
 } from "./types.js";
 
-const defaultApiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000";
+const defaultApiBaseUrl =
+  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000";
 
 export function App() {
   const apiBaseUrl = defaultApiBaseUrl;
-  const [authToken, setAuthToken] = React.useState(() => localStorage.getItem(AUTH_TOKEN_STORAGE_KEY) ?? "");
+  const [authToken, setAuthToken] = React.useState(
+    () => localStorage.getItem(AUTH_TOKEN_STORAGE_KEY) ?? "",
+  );
   const [authUser, setAuthUser] = React.useState<AuthUser | null>(null);
-  const [isRestoringSession, setIsRestoringSession] = React.useState(Boolean(authToken));
+  const [isRestoringSession, setIsRestoringSession] = React.useState(
+    Boolean(authToken),
+  );
   const [authMode, setAuthMode] = React.useState<"login" | "register">("login");
   const [authForm, setAuthForm] = React.useState(createEmptyAuthForm);
-  const [newJob, setNewJob] = React.useState<NewJobFormState>(createDefaultJobForm);
+  const [newJob, setNewJob] =
+    React.useState<NewJobFormState>(createDefaultJobForm);
   const [editingJobId, setEditingJobId] = React.useState<string | null>(null);
   const [jobs, setJobs] = React.useState<JobRow[]>([]);
   const [executions, setExecutions] = React.useState<ExecutionRow[]>([]);
   const [jobPage, setJobPage] = React.useState(DEFAULT_PAGE_STATE);
   const [executionPage, setExecutionPage] = React.useState(DEFAULT_PAGE_STATE);
   const [workerPage, setWorkerPage] = React.useState(DEFAULT_PAGE_STATE);
-  const [deadLetterPage, setDeadLetterPage] = React.useState(DEFAULT_PAGE_STATE);
+  const [deadLetterPage, setDeadLetterPage] =
+    React.useState(DEFAULT_PAGE_STATE);
   const [jobStatusFilter, setJobStatusFilter] = React.useState("");
   const [executionStatusFilter, setExecutionStatusFilter] = React.useState("");
   const [workers, setWorkers] = React.useState<WorkerRow[]>([]);
   const [deadLetters, setDeadLetters] = React.useState<DeadLetterRow[]>([]);
-  const [deadLetterSummary, setDeadLetterSummary] = React.useState<DeadLetterSummary>({ active: 0 });
+  const [deadLetterSummary, setDeadLetterSummary] =
+    React.useState<DeadLetterSummary>({ active: 0 });
   const [users, setUsers] = React.useState<AuthUser[]>([]);
   const [apiKeys, setApiKeys] = React.useState<ApiKeyRow[]>([]);
   const [apiKeyName, setApiKeyName] = React.useState("");
-  const [createdApiKey, setCreatedApiKey] = React.useState<CreatedApiKey | null>(null);
+  const [createdApiKey, setCreatedApiKey] =
+    React.useState<CreatedApiKey | null>(null);
   const [auditEvents, setAuditEvents] = React.useState<AuditEvent[]>([]);
-  const [auditFilters, setAuditFilters] = React.useState(createDefaultAuditFilters);
+  const [auditFilters, setAuditFilters] = React.useState(
+    createDefaultAuditFilters,
+  );
   const [metrics, setMetrics] = React.useState<MetricsOverview>({});
   const [health, setHealth] = React.useState<ServiceHealthMap>({});
   const [activeView, setActiveView] = React.useState<DashboardView>("overview");
   const [message, setMessage] = React.useState("Ready");
-  const { authRequest, request } = React.useMemo(() => createApiClient({ apiBaseUrl, authToken }), [apiBaseUrl, authToken]);
+  const { authRequest, request } = React.useMemo(
+    () => createApiClient({ apiBaseUrl, authToken }),
+    [apiBaseUrl, authToken],
+  );
 
   React.useEffect(() => {
     if (!authToken) {
@@ -70,7 +100,12 @@ export function App() {
   }, [authToken, apiBaseUrl]);
 
   React.useEffect(() => {
-    if (authUser?.role !== "ADMIN" && (activeView === "users" || activeView === "apiKeys" || activeView === "deadLetter")) {
+    if (
+      authUser?.role !== "ADMIN" &&
+      (activeView === "users" ||
+        activeView === "apiKeys" ||
+        activeView === "deadLetter")
+    ) {
       setActiveView("overview");
       setMessage("Admin role is required");
     }
@@ -81,7 +116,12 @@ export function App() {
       return;
     }
 
-    if (authUser.role !== "ADMIN" && (activeView === "users" || activeView === "apiKeys" || activeView === "deadLetter")) {
+    if (
+      authUser.role !== "ADMIN" &&
+      (activeView === "users" ||
+        activeView === "apiKeys" ||
+        activeView === "deadLetter")
+    ) {
       return;
     }
 
@@ -122,7 +162,9 @@ export function App() {
     setMessage("Loading executions");
     const params = createPageParams(page, executionStatusFilter);
 
-    const body = await request<PageResponse<ExecutionRow>>(`/api/executions?${params}`);
+    const body = await request<PageResponse<ExecutionRow>>(
+      `/api/executions?${params}`,
+    );
     setExecutions(body.data);
     setExecutionPage(body.page);
     setMessage(`Loaded ${body.data.length} execution(s)`);
@@ -131,7 +173,9 @@ export function App() {
   async function refreshWorkers(page = workerPage) {
     setMessage("Loading workers");
     const params = createPageParams(page);
-    const body = await request<PageResponse<WorkerRow>>(`/api/workers?${params}`);
+    const body = await request<PageResponse<WorkerRow>>(
+      `/api/workers?${params}`,
+    );
     setWorkers(body.data);
     setWorkerPage(body.page);
     setMessage(`Loaded ${body.data.length} worker(s)`);
@@ -140,7 +184,9 @@ export function App() {
   async function refreshDeadLetters(page = deadLetterPage) {
     setMessage("Loading dead-letter messages");
     const params = createPageParams(page);
-    const body = await request<DeadLetterResponse>(`/api/dead-letter?${params}`);
+    const body = await request<DeadLetterResponse>(
+      `/api/dead-letter?${params}`,
+    );
     setDeadLetters(body.data);
     setDeadLetterSummary(body.summary);
     setDeadLetterPage(body.page);
@@ -165,7 +211,9 @@ export function App() {
     setMessage("Loading audit events");
     const params = createAuditParams(auditFilters);
 
-    const body = await request<{ data: AuditEvent[] }>(`/api/audit-events?${params}`);
+    const body = await request<{ data: AuditEvent[] }>(
+      `/api/audit-events?${params}`,
+    );
     setAuditEvents(body.data);
     setMessage(`Loaded ${body.data.length} audit event(s)`);
   }
@@ -183,7 +231,9 @@ export function App() {
       await request("/api/schedule/run", { method: "POST" });
       await refreshMetrics();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Scheduler run failed");
+      setMessage(
+        error instanceof Error ? error.message : "Scheduler run failed",
+      );
     }
   }
 
@@ -193,7 +243,9 @@ export function App() {
       await request("/api/recover/stalled", { method: "POST" });
       await refreshMetrics();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Stalled recovery failed");
+      setMessage(
+        error instanceof Error ? error.message : "Stalled recovery failed",
+      );
     }
   }
 
@@ -226,13 +278,23 @@ export function App() {
       setEditingJobId(null);
       await refreshJobs();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : editingJobId ? "Update job failed" : "Create job failed");
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : editingJobId
+            ? "Update job failed"
+            : "Create job failed",
+      );
     }
   }
 
-  async function runJobAction(jobId: string, action: "run" | "pause" | "resume" | "edit" | "delete") {
+  async function runJobAction(
+    jobId: string,
+    action: "run" | "pause" | "resume" | "edit" | "delete",
+  ) {
+    const job = jobs.find((row) => row.id === jobId);
+
     if (action === "edit") {
-      const job = jobs.find((row) => row.id === jobId);
       if (!job) {
         setMessage("Job is not loaded");
         return;
@@ -244,10 +306,32 @@ export function App() {
       return;
     }
 
+    if (action === "delete") {
+      const jobLabel = job?.name ? `"${job.name}"` : "this job";
+      const confirmed = window.confirm(
+        `Delete ${jobLabel}? This cannot be undone.`,
+      );
+
+      if (!confirmed) {
+        setMessage("Canceled job delete");
+        return;
+      }
+    }
+
     try {
-      setMessage(`${action} job`);
+      setMessage(
+        action === "run" ? "Queueing manual job run" : `${action} job`,
+      );
       if (action === "delete") {
         await request(`/api/jobs/${jobId}`, { method: "DELETE" });
+      } else if (action === "run") {
+        const execution = await request<ExecutionRow>(
+          `/api/jobs/${jobId}/run`,
+          { method: "POST" },
+        );
+        await refreshJobs();
+        setMessage(`Manual run queued execution ${execution.id}`);
+        return;
       } else {
         await request(`/api/jobs/${jobId}/${action}`, { method: "POST" });
       }
@@ -256,6 +340,9 @@ export function App() {
         setNewJob(createDefaultJobForm());
       }
       await refreshJobs();
+      setMessage(
+        action === "delete" ? "Deleted job" : `${action} job complete`,
+      );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : `${action} failed`);
     }
@@ -267,10 +354,15 @@ export function App() {
     setMessage("Canceled job edit");
   }
 
-  async function runExecutionAction(executionId: string, action: "cancel" | "retry") {
+  async function runExecutionAction(
+    executionId: string,
+    action: "cancel" | "retry",
+  ) {
     try {
       setMessage(`${action} execution`);
-      await request(`/api/executions/${executionId}/${action}`, { method: "POST" });
+      await request(`/api/executions/${executionId}/${action}`, {
+        method: "POST",
+      });
       if (action === "retry") {
         await request("/api/schedule/run", { method: "POST" });
       }
@@ -304,7 +396,9 @@ export function App() {
       setAuthForm(createEmptyAuthForm());
       setMessage(`Signed in as ${body.user.email}`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Auth request failed");
+      setMessage(
+        error instanceof Error ? error.message : "Auth request failed",
+      );
     }
   }
 
@@ -322,7 +416,9 @@ export function App() {
       await refreshApiKeys();
       setMessage("Created API key");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "API key creation failed");
+      setMessage(
+        error instanceof Error ? error.message : "API key creation failed",
+      );
     }
   }
 
@@ -336,15 +432,22 @@ export function App() {
       await refreshApiKeys();
       setMessage("Revoked API key");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "API key revoke failed");
+      setMessage(
+        error instanceof Error ? error.message : "API key revoke failed",
+      );
     }
   }
 
-  async function runDeadLetterAction(messageId: string, action: "requeue" | "discard") {
+  async function runDeadLetterAction(
+    messageId: string,
+    action: "requeue" | "discard",
+  ) {
     try {
       setMessage(`${action} dead-letter message`);
       if (action === "requeue") {
-        await request(`/api/dead-letter/${messageId}/requeue`, { method: "POST" });
+        await request(`/api/dead-letter/${messageId}/requeue`, {
+          method: "POST",
+        });
         await request("/api/schedule/run", { method: "POST" });
       } else {
         await request(`/api/dead-letter/${messageId}`, { method: "DELETE" });
@@ -352,7 +455,11 @@ export function App() {
       await refreshDeadLetters();
       setMessage(`${action} dead-letter message complete`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : `${action} dead-letter message failed`);
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : `${action} dead-letter message failed`,
+      );
     }
   }
 
@@ -393,15 +500,16 @@ export function App() {
 
   return (
     <main className="app-shell">
-      <Sidebar activeView={activeView} authUser={authUser} onViewChange={setActiveView} />
+      <Sidebar
+        activeView={activeView}
+        authUser={authUser}
+        onViewChange={setActiveView}
+      />
 
       <section className="workspace">
         <Toolbar onRefresh={() => void refreshCurrentView()} />
 
-        <AuthStrip
-          authUser={authUser}
-          onSignOut={signOut}
-        />
+        <AuthStrip authUser={authUser} onSignOut={signOut} />
 
         <div className="status-line">{message}</div>
 

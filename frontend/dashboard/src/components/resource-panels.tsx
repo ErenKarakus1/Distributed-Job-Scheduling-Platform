@@ -1,4 +1,14 @@
-import type { ApiKeyRow, AuditEvent, AuthUser, CreatedApiKey, DeadLetterRow, DeadLetterSummary, ServiceHealthMap, WorkerRow } from "../types.js";
+import type {
+  ApiKeyRow,
+  AuditEvent,
+  AuthUser,
+  CreatedApiKey,
+  DeadLetterRow,
+  DeadLetterSummary,
+  ServiceHealthMap,
+  WorkerRow,
+} from "../types.js";
+import { formatDateTime } from "../utils/dates.js";
 
 export function WorkerPanel(props: { rows: WorkerRow[] }) {
   return (
@@ -24,7 +34,11 @@ export function WorkerPanel(props: { rows: WorkerRow[] }) {
                   <tr key={worker.id ?? String(index)}>
                     <td>{worker.serviceInstanceId ?? worker.id ?? ""}</td>
                     <td>
-                      <span className={`status-pill ${String(worker.status ?? "").toLowerCase()}`}>{String(worker.status ?? "")}</span>
+                      <span
+                        className={`status-pill ${String(worker.status ?? "").toLowerCase()}`}
+                      >
+                        {String(worker.status ?? "")}
+                      </span>
                     </td>
                     <td>{worker.activeExecutionCount ?? 0}</td>
                     <td>{worker.currentExecutionId ?? "-"}</td>
@@ -40,7 +54,12 @@ export function WorkerPanel(props: { rows: WorkerRow[] }) {
   );
 }
 
-export function DeadLetterPanel(props: { rows: DeadLetterRow[]; summary: DeadLetterSummary; onDiscard: (messageId: string) => void; onRequeue: (messageId: string) => void }) {
+export function DeadLetterPanel(props: {
+  rows: DeadLetterRow[];
+  summary: DeadLetterSummary;
+  onDiscard: (messageId: string) => void;
+  onRequeue: (messageId: string) => void;
+}) {
   return (
     <section className="panel">
       <h2>Dead Letter Queue</h2>
@@ -51,7 +70,7 @@ export function DeadLetterPanel(props: { rows: DeadLetterRow[]; summary: DeadLet
         </div>
         <div className="metric-card">
           <span>Oldest message</span>
-          <strong>{props.summary.oldestCreatedAt ?? "-"}</strong>
+          <strong>{formatDateTime(props.summary.oldestCreatedAt)}</strong>
         </div>
       </div>
       {props.rows.length === 0 ? (
@@ -74,17 +93,23 @@ export function DeadLetterPanel(props: { rows: DeadLetterRow[]; summary: DeadLet
             <tbody>
               {props.rows.map((message) => (
                 <tr key={message.id}>
-                  <td>{message.createdAt}</td>
+                  <td>{formatDateTime(message.createdAt)}</td>
                   <td>{message.reason}</td>
                   <td>{message.executionId ?? "-"}</td>
                   <td>{message.execution?.jobId ?? "-"}</td>
                   <td>{message.sourceQueue}</td>
                   <td>{message.error ?? "-"}</td>
-                  <td className="metadata-cell">{JSON.stringify(message.payload)}</td>
+                  <td className="metadata-cell">
+                    {JSON.stringify(message.payload)}
+                  </td>
                   <td>
                     <div className="row-actions">
-                      <button onClick={() => props.onRequeue(message.id)}>Requeue</button>
-                      <button onClick={() => props.onDiscard(message.id)}>Discard</button>
+                      <button onClick={() => props.onRequeue(message.id)}>
+                        Requeue
+                      </button>
+                      <button onClick={() => props.onDiscard(message.id)}>
+                        Discard
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -97,7 +122,11 @@ export function DeadLetterPanel(props: { rows: DeadLetterRow[]; summary: DeadLet
   );
 }
 
-export function UserPanel(props: { currentUserId: string; rows: AuthUser[]; onRoleChange: (userId: string, role: "ADMIN" | "VIEWER") => void }) {
+export function UserPanel(props: {
+  currentUserId: string;
+  rows: AuthUser[];
+  onRoleChange: (userId: string, role: "ADMIN" | "VIEWER") => void;
+}) {
   return (
     <section className="panel">
       <h2>Users</h2>
@@ -126,7 +155,16 @@ export function UserPanel(props: { currentUserId: string; rows: AuthUser[]; onRo
                       {isCurrentUser ? (
                         <span className="locked-role">{user.role}</span>
                       ) : (
-                        <select className="inline-select" value={user.role} onChange={(event) => props.onRoleChange(user.id, event.target.value as "ADMIN" | "VIEWER")}>
+                        <select
+                          className="inline-select"
+                          value={user.role}
+                          onChange={(event) =>
+                            props.onRoleChange(
+                              user.id,
+                              event.target.value as "ADMIN" | "VIEWER",
+                            )
+                          }
+                        >
                           <option value="ADMIN">ADMIN</option>
                           <option value="VIEWER">VIEWER</option>
                         </select>
@@ -144,7 +182,11 @@ export function UserPanel(props: { currentUserId: string; rows: AuthUser[]; onRo
   );
 }
 
-export function ApiKeyPanel(props: { rows: ApiKeyRow[]; createdKey: CreatedApiKey | null; onRevoke: (apiKeyId: string) => void }) {
+export function ApiKeyPanel(props: {
+  rows: ApiKeyRow[];
+  createdKey: CreatedApiKey | null;
+  onRevoke: (apiKeyId: string) => void;
+}) {
   return (
     <section className="panel">
       <h2>API Keys</h2>
@@ -177,7 +219,9 @@ export function ApiKeyPanel(props: { rows: ApiKeyRow[]; createdKey: CreatedApiKe
                   <td>{apiKey.id}</td>
                   <td>
                     <div className="row-actions">
-                      <button onClick={() => props.onRevoke(apiKey.id)}>Revoke</button>
+                      <button onClick={() => props.onRevoke(apiKey.id)}>
+                        Revoke
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -215,9 +259,15 @@ export function AuditPanel(props: { rows: AuditEvent[] }) {
                   <td>{event.createdAt}</td>
                   <td>{event.actorLabel ?? event.actorType}</td>
                   <td>{event.action}</td>
-                  <td>{event.resourceId ? `${event.resourceType}:${event.resourceId}` : event.resourceType}</td>
+                  <td>
+                    {event.resourceId
+                      ? `${event.resourceType}:${event.resourceId}`
+                      : event.resourceType}
+                  </td>
                   <td>{event.requestId ?? "-"}</td>
-                  <td className="metadata-cell">{event.metadata ? JSON.stringify(event.metadata) : "-"}</td>
+                  <td className="metadata-cell">
+                    {event.metadata ? JSON.stringify(event.metadata) : "-"}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -249,15 +299,26 @@ export function HealthPanel(props: { health: ServiceHealthMap }) {
             </thead>
             <tbody>
               {entries.map(([service, result]) => {
-                const status = result.body?.status ?? (result.statusCode >= 200 && result.statusCode < 300 ? "ok" : "error");
-                const details = result.error ?? result.body?.service ?? JSON.stringify(result.body ?? {});
+                const status =
+                  result.body?.status ??
+                  (result.statusCode >= 200 && result.statusCode < 300
+                    ? "ok"
+                    : "error");
+                const details =
+                  result.error ??
+                  result.body?.service ??
+                  JSON.stringify(result.body ?? {});
 
                 return (
                   <tr key={service}>
                     <td>{service}</td>
                     <td>{result.statusCode}</td>
                     <td>
-                      <span className={`status-pill ${String(status).toLowerCase()}`}>{status}</span>
+                      <span
+                        className={`status-pill ${String(status).toLowerCase()}`}
+                      >
+                        {status}
+                      </span>
                     </td>
                     <td>{details || "-"}</td>
                   </tr>
