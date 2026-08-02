@@ -1,6 +1,9 @@
 # Distributed Job Scheduling Platform
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?logo=open-source-initiative&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Compose-blue.svg?logo=docker&logoColor=white)
+![CI](https://github.com/ErenKarakus1/Distributed-Job-Scheduling-Platform/actions/workflows/ci.yml/badge.svg)
+
 ![Node.js](https://img.shields.io/badge/Node.js-22-green.svg?logo=node.js&logoColor=white)
 ![Express](https://img.shields.io/badge/Express-4-black.svg?logo=express&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue.svg?logo=typescript&logoColor=white)
@@ -8,8 +11,6 @@
 ![RabbitMQ](https://img.shields.io/badge/RabbitMQ-3.13-orange.svg?logo=rabbitmq&logoColor=white)
 ![Redis](https://img.shields.io/badge/Redis-7-red.svg?logo=redis&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-61DAFB.svg?logo=react&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-Compose-blue.svg?logo=docker&logoColor=white)
-![CI](https://github.com/ErenKarakus1/Distributed-Job-Scheduling-Platform/actions/workflows/ci.yml/badge.svg)
 
 A microservices-based distributed HTTP job scheduling platform for creating one-time and recurring jobs, executing them across workers, retrying failures, recovering stalled executions, tracking dead-lettered work, and monitoring execution history through an API and web dashboard.
 
