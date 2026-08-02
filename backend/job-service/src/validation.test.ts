@@ -85,6 +85,13 @@ test("updateJobSchema rejects retry delay ranges that cannot back off", () => {
   assert.equal(result.error.issues[0]?.path.join("."), "retryInitialDelayMs");
 });
 
+test("updateJobSchema rejects direct soft-delete status updates", () => {
+  const result = updateJobSchema.safeParse({ status: "DELETED" });
+
+  assert.equal(result.success, false);
+  assert.equal(result.error.issues[0]?.path.join("."), "status");
+});
+
 test("paginationSchema coerces defaults and caps page size", () => {
   assert.deepEqual(paginationSchema.parse({}), { limit: 25, offset: 0 });
 

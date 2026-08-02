@@ -11,6 +11,7 @@ export const httpMethodSchema = z.enum([
 ]);
 export const jobTypeSchema = z.enum(["ONE_TIME", "RECURRING"]);
 export const jobStatusSchema = z.enum(["ACTIVE", "PAUSED", "DELETED"]);
+export const mutableJobStatusSchema = z.enum(["ACTIVE", "PAUSED"]);
 export const backoffTypeSchema = z.enum(["FIXED", "EXPONENTIAL"]);
 export const paginationSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(25),
@@ -107,7 +108,7 @@ export const createJobSchema = jobPayloadSchema.superRefine((job, ctx) => {
 export const updateJobSchema = jobPayloadSchema
   .partial()
   .extend({
-    status: jobStatusSchema.optional(),
+    status: mutableJobStatusSchema.optional(),
   })
   .superRefine((job, ctx) => {
     if (

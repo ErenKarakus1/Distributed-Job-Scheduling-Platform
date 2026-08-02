@@ -75,21 +75,6 @@ export function createWorkerRuntime(deps: WorkerRuntimeDependencies) {
         ? "MAX_ATTEMPTS_EXHAUSTED"
         : undefined;
 
-      await tx.executionAttempt.create({
-        data: {
-          executionId: input.executionId,
-          attemptNumber,
-          workerId,
-          status: input.status,
-          httpStatusCode: input.httpStatusCode,
-          responseBodyPreview: input.responseBodyPreview,
-          errorMessage: input.errorMessage,
-          startedAt: input.startedAt,
-          finishedAt: input.finishedAt,
-          durationMs: input.finishedAt.getTime() - input.startedAt.getTime(),
-        },
-      });
-
       const updatedExecution = await tx.execution.updateMany({
         where: {
           id: input.executionId,
@@ -116,6 +101,21 @@ export function createWorkerRuntime(deps: WorkerRuntimeDependencies) {
       if (updatedExecution.count === 0) {
         return;
       }
+
+      await tx.executionAttempt.create({
+        data: {
+          executionId: input.executionId,
+          attemptNumber,
+          workerId,
+          status: input.status,
+          httpStatusCode: input.httpStatusCode,
+          responseBodyPreview: input.responseBodyPreview,
+          errorMessage: input.errorMessage,
+          startedAt: input.startedAt,
+          finishedAt: input.finishedAt,
+          durationMs: input.finishedAt.getTime() - input.startedAt.getTime(),
+        },
+      });
 
       if (deadLetterReason) {
         await tx.deadLetterMessage.create({

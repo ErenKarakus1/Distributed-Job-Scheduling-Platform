@@ -123,7 +123,7 @@ Retries are controlled per job.
 Retry configuration includes:
 
 - `maxAttempts`
-- `retryDelayMs`
+- `retryInitialDelayMs`
 - `retryMaxDelayMs`
 - `backoffType`
 
@@ -590,7 +590,7 @@ curl -X POST http://localhost:3000/api/jobs \
     "url": "https://httpbin.org/post",
     "runAt": "2026-08-02T12:00:00.000Z",
     "maxAttempts": 3,
-    "retryDelayMs": 1000,
+    "retryInitialDelayMs": 1000,
     "retryMaxDelayMs": 30000,
     "backoffType": "EXPONENTIAL"
   }'
