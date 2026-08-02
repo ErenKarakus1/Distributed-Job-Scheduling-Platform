@@ -62,6 +62,10 @@ async function main() {
   assert(login?.token, "Expected login token");
 
   const authHeaders = { authorization: `Bearer ${login.token}` };
+  const session = await request("/auth/me", {
+    headers: authHeaders,
+  });
+  assert(session?.user?.role === "ADMIN", `Expected smoke user to be ADMIN, got ${session?.user?.role ?? "unknown"}`);
 
   const apiKey = await request("/internal/api-keys", {
     method: "POST",
