@@ -6,6 +6,9 @@ const schedulerAdvisoryLockId = 4_219_001;
 
 type PublishExecution = (executionId: string) => Promise<void>;
 type SchedulerDb = PrismaClient | Prisma.TransactionClient;
+type SchedulerPlan = SchedulerStats & {
+  executionIds: string[];
+};
 
 type SchedulerDependencies = {
   prisma: PrismaClient;
@@ -41,12 +44,17 @@ export function createScheduler(deps: SchedulerDependencies) {
     }
   }
 
-  async function queueExecution(db: SchedulerDb, executionId: string) {
+  async function publishQueuedExecution(executionId: string) {
     await publishExecution(executionId);
 
-    await db.execution.update({
-      where: { id: executionId },
-      data: { status: "QUEUED" },
+    await prisma.execution.updateMany({
+      where: {
+        id: executionId,
+        status: { in: ["PENDING", "RETRY_SCHEDULED", "STALLED"] },
+      },
+      data: {
+        status: "QUEUED",
+      },
     });
   }
 
@@ -62,6 +70,8 @@ export function createScheduler(deps: SchedulerDependencies) {
       orderBy: { runAt: "asc" },
     });
 
+    const executionIds: string[] = [];
+
     for (const job of jobs) {
       const execution = await db.execution.create({
         data: {
@@ -72,10 +82,10 @@ export function createScheduler(deps: SchedulerDependencies) {
         },
       });
 
-      await queueExecution(db, execution.id);
+      executionIds.push(execution.id);
     }
 
-    return jobs.length;
+    return executionIds;
   }
 
   async function scheduleDueRecurringJobs(db: SchedulerDb, now: Date) {
@@ -88,6 +98,8 @@ export function createScheduler(deps: SchedulerDependencies) {
       take: batchSize,
       orderBy: { nextRunAt: "asc" },
     });
+
+    const executionIds: string[] = [];
 
     for (const schedule of schedules) {
       const lockedSchedule = await db.jobSchedule.findUnique({
@@ -119,10 +131,10 @@ export function createScheduler(deps: SchedulerDependencies) {
         },
       });
 
-      await queueExecution(db, execution.id);
+      executionIds.push(execution.id);
     }
 
-    return schedules.length;
+    return executionIds;
   }
 
   async function scheduleDueRetries(db: SchedulerDb, now: Date) {
@@ -136,11 +148,7 @@ export function createScheduler(deps: SchedulerDependencies) {
       orderBy: { nextAttemptAt: "asc" },
     });
 
-    for (const execution of executions) {
-      await queueExecution(db, execution.id);
-    }
-
-    return executions.length;
+    return executions.map((execution) => execution.id);
   }
 
   async function scheduleDuePendingExecutions(db: SchedulerDb, now: Date) {
@@ -154,15 +162,11 @@ export function createScheduler(deps: SchedulerDependencies) {
       orderBy: { nextAttemptAt: "asc" },
     });
 
-    for (const execution of executions) {
-      await queueExecution(db, execution.id);
-    }
-
-    return executions.length;
+    return executions.map((execution) => execution.id);
   }
 
   async function runSchedulerOnce(now = new Date()): Promise<SchedulerStats> {
-    return prisma.$transaction(async (tx) => {
+    const plan = await prisma.$transaction(async (tx): Promise<SchedulerPlan> => {
       const lockAcquired = await acquireSchedulerLock(tx);
 
       if (!lockAcquired) {
@@ -173,11 +177,12 @@ export function createScheduler(deps: SchedulerDependencies) {
           recurringQueued: 0,
           retriesQueued: 0,
           pendingQueued: 0,
+          executionIds: [],
         };
       }
 
       try {
-        const [oneTimeQueued, recurringQueued, retriesQueued, pendingQueued] =
+        const [oneTimeIds, recurringIds, retryIds, pendingIds] =
           await Promise.all([
             scheduleDueOneTimeJobs(tx, now),
             scheduleDueRecurringJobs(tx, now),
@@ -188,15 +193,28 @@ export function createScheduler(deps: SchedulerDependencies) {
         return {
           lockAcquired,
           skipped: false,
-          oneTimeQueued,
-          recurringQueued,
-          retriesQueued,
-          pendingQueued,
+          oneTimeQueued: oneTimeIds.length,
+          recurringQueued: recurringIds.length,
+          retriesQueued: retryIds.length,
+          pendingQueued: pendingIds.length,
+          executionIds: [
+            ...oneTimeIds,
+            ...recurringIds,
+            ...retryIds,
+            ...pendingIds,
+          ],
         };
       } finally {
         await releaseSchedulerLock();
       }
     });
+
+    for (const executionId of plan.executionIds) {
+      await publishQueuedExecution(executionId);
+    }
+
+    const { executionIds: _executionIds, ...stats } = plan;
+    return stats;
   }
 
   return { runSchedulerOnce };
