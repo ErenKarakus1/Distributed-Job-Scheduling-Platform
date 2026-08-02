@@ -48,14 +48,15 @@ export function formatApiError(response: Pick<Response, "status">, body: unknown
   return message ? `${message}${codeSuffix}` : `Request failed with status ${response.status}`;
 }
 
-async function readJsonResponse<T>(response: Response) {
-  const body = (await response.json()) as T;
+export async function readJsonResponse<T>(response: Response) {
+  const text = await response.text();
+  const body = text ? (JSON.parse(text) as T) : undefined;
 
   if (!response.ok) {
     throw new ApiError(formatApiError(response, body), response.status, body);
   }
 
-  return body;
+  return body as T;
 }
 
 export function createApiClient(options: ApiClientOptions) {

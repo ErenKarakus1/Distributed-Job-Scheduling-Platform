@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { formatApiError } from "./client.js";
+import { ApiError, formatApiError, readJsonResponse } from "./client.js";
 
 test("formatApiError summarizes validation issues with field paths", () => {
   const message = formatApiError(
@@ -19,4 +19,17 @@ test("formatApiError summarizes validation issues with field paths", () => {
 
 test("formatApiError falls back to response errors without issues", () => {
   assert.equal(formatApiError({ status: 409 }, { error: "User already exists" }), "User already exists");
+});
+
+test("readJsonResponse accepts empty success responses", async () => {
+  const body = await readJsonResponse(new Response(null, { status: 204 }));
+
+  assert.equal(body, undefined);
+});
+
+test("readJsonResponse parses JSON error responses", async () => {
+  await assert.rejects(
+    readJsonResponse(new Response(JSON.stringify({ error: "API key not found" }), { status: 404 })),
+    (error) => error instanceof ApiError && error.message === "API key not found",
+  );
 });
