@@ -62,13 +62,12 @@ Developers can create HTTP jobs, schedule future or recurring runs, inspect atte
 - React
 - TypeScript
 - Vite
-- CSS
 
 ### Infrastructure
 
 - Docker
 - Docker Compose
-- Nginx for the dashboard container
+- Nginx for serving the built dashboard frontend
 
 ## Features
 
@@ -310,7 +309,7 @@ The dashboard opens to a dedicated login/register page. Docker Compose bootstrap
 
 Docker Compose starts:
 
-- `dashboard` - React dashboard served by Nginx
+- `dashboard` - React dashboard frontend served by Nginx
 - `api-gateway` - public API, auth, rate limiting, and service aggregation
 - `job-service` - job definitions and schedules
 - `execution-service` - execution lifecycle, attempts, retry, recovery, workers, and metrics
