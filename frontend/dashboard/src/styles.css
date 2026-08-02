@@ -464,7 +464,10 @@ textarea {
 }
 
 .schedule-grid {
-  grid-template-columns: repeat(3, minmax(160px, 1fr));
+  grid-template-columns: minmax(180px, 1fr) minmax(160px, 1fr) minmax(
+      180px,
+      1fr
+    ) minmax(180px, 1fr);
 }
 
 .retry-grid {
@@ -484,6 +487,10 @@ textarea {
   color: #53627a;
   font-size: 12px;
   font-weight: 600;
+}
+
+.schedule-preview {
+  grid-column: 1 / -1;
 }
 
 .job-form-actions {

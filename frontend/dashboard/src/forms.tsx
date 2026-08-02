@@ -1,5 +1,9 @@
 import type { AuditFilters, NewJobFormState } from "./types.js";
-import { humanizeCronExpression } from "./utils/cron.js";
+import {
+  cronScheduleOptions,
+  getCronScheduleOptionValue,
+  humanizeCronExpression,
+} from "./utils/cron.js";
 
 const fallbackTimezones = [
   "UTC",
@@ -62,6 +66,7 @@ export function JobCreateForm(props: JobCreateFormProps) {
   const { job, onChange } = props;
   const isEditing = props.mode === "edit";
   const cronPreview = humanizeCronExpression(job.cronExpression);
+  const selectedCronSchedule = getCronScheduleOptionValue(job.cronExpression);
 
   return (
     <section className="panel create-panel">
@@ -158,6 +163,26 @@ export function JobCreateForm(props: JobCreateFormProps) {
             ) : (
               <>
                 <label>
+                  Schedule
+                  <select
+                    value={selectedCronSchedule}
+                    onChange={(event) => {
+                      if (event.target.value === "CUSTOM") {
+                        return;
+                      }
+
+                      onChange({ ...job, cronExpression: event.target.value });
+                    }}
+                  >
+                    {cronScheduleOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                    <option value="CUSTOM">Custom</option>
+                  </select>
+                </label>
+                <label>
                   Cron
                   <input
                     value={job.cronExpression}
@@ -166,7 +191,6 @@ export function JobCreateForm(props: JobCreateFormProps) {
                     }
                     required
                   />
-                  <span className="field-hint">{cronPreview}</span>
                 </label>
                 <label>
                   Timezone
@@ -190,6 +214,9 @@ export function JobCreateForm(props: JobCreateFormProps) {
                     required
                   />
                 </label>
+                <span className="field-hint schedule-preview">
+                  {cronPreview}
+                </span>
               </>
             )}
           </div>

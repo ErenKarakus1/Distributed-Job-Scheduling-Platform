@@ -27,7 +27,7 @@ function describeMinute(minute: string) {
   return undefined;
 }
 
-function describeDayOfWeek(dayOfWeek: string) {
+function getDayOfWeekText(dayOfWeek: string) {
   const dayNames: Record<string, string> = {
     "0": "Sunday",
     "1": "Monday",
@@ -44,10 +44,30 @@ function describeDayOfWeek(dayOfWeek: string) {
   }
 
   if (/^\d+(,\d+)*$/.test(dayOfWeek)) {
-    return ` on ${formatList(dayOfWeek.split(","), (value) => dayNames[value] ?? value)}`;
+    return formatList(
+      dayOfWeek.split(","),
+      (value) => dayNames[value] ?? value,
+    );
   }
 
-  return ` when day-of-week matches ${dayOfWeek}`;
+  return `day-of-week ${dayOfWeek}`;
+}
+
+export const cronScheduleOptions = [
+  { label: "Every minute", value: "* * * * *" },
+  { label: "Every 5 minutes", value: "*/5 * * * *" },
+  { label: "Every 15 minutes", value: "*/15 * * * *" },
+  { label: "Every 30 minutes", value: "*/30 * * * *" },
+  { label: "Every hour", value: "0 * * * *" },
+  { label: "Every 2 hours", value: "0 */2 * * *" },
+  { label: "Every day at 09:00", value: "0 9 * * *" },
+  { label: "Every Monday at 09:00", value: "0 9 * * 1" },
+] as const;
+
+export function getCronScheduleOptionValue(expression: string) {
+  return cronScheduleOptions.some((option) => option.value === expression)
+    ? expression
+    : "CUSTOM";
 }
 
 export function humanizeCronExpression(expression: string) {
@@ -105,18 +125,18 @@ export function humanizeCronExpression(expression: string) {
 
   if (/^\d+$/.test(minute) && /^\d+$/.test(hour)) {
     const time = `${formatNumber(hour)}:${formatNumber(minute)}`;
-    const dayText = describeDayOfWeek(dayOfWeek) ?? "";
 
     if (dayOfMonth === "*" && month === "*") {
-      return `Every day at ${time}${dayText}`;
+      const dayText = getDayOfWeekText(dayOfWeek);
+      return dayText ? `Every ${dayText} at ${time}` : `Every day at ${time}`;
     }
 
     if (/^\d+$/.test(dayOfMonth) && month === "*") {
-      return `Every month on day ${dayOfMonth} at ${time}${dayText}`;
+      return `Every month on day ${dayOfMonth} at ${time}`;
     }
 
     if (dayOfMonth === "*" && /^\d+$/.test(month)) {
-      return `Every day in month ${month} at ${time}${dayText}`;
+      return `Every day in month ${month} at ${time}`;
     }
 
     return `At ${time} when date matches ${dayOfMonth} ${month} ${dayOfWeek}`;
