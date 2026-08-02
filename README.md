@@ -694,6 +694,8 @@ curl -X POST http://localhost:3000/api/schedule/run \
 
 ## Tests and Checks
 
+The current automated suite includes 81 passing unit tests across the gateway, job service, execution service, scheduler service, worker service, and dashboard.
+
 Run all workspace tests:
 
 ```bash
