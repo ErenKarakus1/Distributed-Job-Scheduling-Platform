@@ -42,6 +42,23 @@ import type {
 const defaultApiBaseUrl =
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000";
 
+const jobActionLabels = {
+  delete: "Delete",
+  pause: "Pause",
+  resume: "Resume",
+  run: "Run",
+} as const;
+
+const executionActionLabels = {
+  cancel: "Cancel",
+  retry: "Retry",
+} as const;
+
+const deadLetterActionLabels = {
+  discard: "Discard",
+  requeue: "Requeue",
+} as const;
+
 export function App() {
   const apiBaseUrl = defaultApiBaseUrl;
   const [authToken, setAuthToken] = React.useState(
@@ -319,8 +336,10 @@ export function App() {
     }
 
     try {
+      const actionLabel = jobActionLabels[action];
+
       setMessage(
-        action === "run" ? "Queueing manual job run" : `${action} job`,
+        action === "run" ? "Queueing manual job run" : `${actionLabel} job`,
       );
       if (action === "delete") {
         await request(`/api/jobs/${jobId}`, { method: "DELETE" });
@@ -341,10 +360,13 @@ export function App() {
       }
       await refreshJobs();
       setMessage(
-        action === "delete" ? "Deleted job" : `${action} job complete`,
+        action === "delete" ? "Deleted job" : `${actionLabel} job complete`,
       );
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : `${action} failed`);
+      const actionLabel = jobActionLabels[action];
+      setMessage(
+        error instanceof Error ? error.message : `${actionLabel} failed`,
+      );
     }
   }
 
@@ -358,8 +380,10 @@ export function App() {
     executionId: string,
     action: "cancel" | "retry",
   ) {
+    const actionLabel = executionActionLabels[action];
+
     try {
-      setMessage(`${action} execution`);
+      setMessage(`${actionLabel} execution`);
       await request(`/api/executions/${executionId}/${action}`, {
         method: "POST",
       });
@@ -367,8 +391,11 @@ export function App() {
         await request("/api/schedule/run", { method: "POST" });
       }
       await refreshExecutions();
+      setMessage(`${actionLabel} execution complete`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : `${action} failed`);
+      setMessage(
+        error instanceof Error ? error.message : `${actionLabel} failed`,
+      );
     }
   }
 
@@ -453,8 +480,10 @@ export function App() {
     messageId: string,
     action: "requeue" | "discard",
   ) {
+    const actionLabel = deadLetterActionLabels[action];
+
     try {
-      setMessage(`${action} dead-letter message`);
+      setMessage(`${actionLabel} dead-letter message`);
       if (action === "requeue") {
         await request(`/api/dead-letter/${messageId}/requeue`, {
           method: "POST",
@@ -464,12 +493,12 @@ export function App() {
         await request(`/api/dead-letter/${messageId}`, { method: "DELETE" });
       }
       await refreshDeadLetters();
-      setMessage(`${action} dead-letter message complete`);
+      setMessage(`${actionLabel} dead-letter message complete`);
     } catch (error) {
       setMessage(
         error instanceof Error
           ? error.message
-          : `${action} dead-letter message failed`,
+          : `${actionLabel} dead-letter message failed`,
       );
     }
   }

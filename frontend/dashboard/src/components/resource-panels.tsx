@@ -294,7 +294,7 @@ export function HealthPanel(props: { health: ServiceHealthMap }) {
                 <th>Service</th>
                 <th>HTTP</th>
                 <th>Status</th>
-                <th>Details</th>
+                <th>Response</th>
               </tr>
             </thead>
             <tbody>
@@ -304,7 +304,7 @@ export function HealthPanel(props: { health: ServiceHealthMap }) {
                   (result.statusCode >= 200 && result.statusCode < 300
                     ? "ok"
                     : "error");
-                const details =
+                const response =
                   result.error ??
                   result.body?.service ??
                   JSON.stringify(result.body ?? {});
@@ -320,7 +320,7 @@ export function HealthPanel(props: { health: ServiceHealthMap }) {
                         {status}
                       </span>
                     </td>
-                    <td>{details || "-"}</td>
+                    <td>{response || "-"}</td>
                   </tr>
                 );
               })}
