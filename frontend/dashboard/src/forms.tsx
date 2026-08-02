@@ -168,6 +168,7 @@ export function JobCreateForm(props: JobCreateFormProps) {
                     value={selectedCronSchedule}
                     onChange={(event) => {
                       if (event.target.value === "CUSTOM") {
+                        onChange({ ...job, cronExpression: "" });
                         return;
                       }
 
