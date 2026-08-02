@@ -512,6 +512,12 @@ npm run dev:worker-service
 npm run dev:api-gateway
 ```
 
+Or start all workspace dev scripts together:
+
+```bash
+npm run dev
+```
+
 ### 7. Start the dashboard
 
 ```bash
@@ -538,13 +544,13 @@ In Windows PowerShell, either run each example on one line or replace `\` line c
 ```bash
 curl -X POST http://localhost:3000/auth/register \
   -H "content-type: application/json" \
-  -d '{"email":"admin@example.com","name":"Admin","password":"password123"}'
+  -d '{"email":"viewer@example.com","name":"Viewer","password":"password123"}'
 ```
 
 ```bash
 curl -X POST http://localhost:3000/auth/login \
   -H "content-type: application/json" \
-  -d '{"email":"admin@example.com","password":"password123"}'
+  -d '{"email":"viewer@example.com","password":"password123"}'
 ```
 
 Use the returned token:
@@ -686,7 +692,7 @@ curl -X POST http://localhost:3000/api/schedule/run \
 
 ## Tests and Checks
 
-Run all backend tests:
+Run all workspace tests:
 
 ```bash
 npm test
