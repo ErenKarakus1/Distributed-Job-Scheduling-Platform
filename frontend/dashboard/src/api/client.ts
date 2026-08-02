@@ -8,6 +8,10 @@ type ApiErrorBody = {
   error?: string;
   code?: string;
   message?: string;
+  issues?: Array<{
+    path?: Array<string | number>;
+    message?: string;
+  }>;
 };
 
 export class ApiError extends Error {
@@ -25,9 +29,18 @@ function isErrorBody(body: unknown): body is ApiErrorBody {
   return typeof body === "object" && body !== null;
 }
 
-function formatApiError(response: Response, body: unknown) {
+export function formatApiError(response: Pick<Response, "status">, body: unknown) {
   if (!isErrorBody(body)) {
     return `Request failed with status ${response.status}`;
+  }
+
+  if (Array.isArray(body.issues) && body.issues.length > 0) {
+    return body.issues
+      .map((issue) => {
+        const field = Array.isArray(issue.path) && issue.path.length > 0 ? issue.path.join(".") : "request";
+        return `${field}: ${issue.message ?? "Invalid value"}`;
+      })
+      .join("; ");
   }
 
   const message = body.error ?? body.message;
