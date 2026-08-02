@@ -872,7 +872,6 @@ Retries are stored as part of execution state instead of being hidden inside wor
 - Refresh-token flow with HttpOnly cookies
 - Transactional outbox for stronger RabbitMQ publish consistency
 - Multi-tenant organizations
-- Per-job execution timeout controls in the dashboard
 - Worker autoscaling notes
 - Metrics export for Prometheus
 - Structured tracing across services
