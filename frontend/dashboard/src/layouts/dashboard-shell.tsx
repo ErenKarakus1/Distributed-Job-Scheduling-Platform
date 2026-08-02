@@ -1,4 +1,4 @@
-import type { AuthUser } from "./types.js";
+import type { AuthUser } from "../types.js";
 
 export type DashboardView = "overview" | "jobs" | "executions" | "workers" | "users" | "apiKeys" | "audit" | "health";
 

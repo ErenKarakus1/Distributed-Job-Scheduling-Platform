@@ -1,11 +1,11 @@
 import React from "react";
 import { createApiClient } from "./api/client.js";
 import { createAuditParams, createJobRequestBody, createPageParams } from "./api/dashboard-requests.js";
-import { AuthPage } from "./components/auth-page.js";
+import { AuthStrip, type DashboardView, Sidebar, Toolbar } from "./layouts/dashboard-shell.js";
+import { AuthPage } from "./pages/auth-page.js";
+import { DashboardViews } from "./pages/dashboard-views.js";
 import { AUTH_TOKEN_STORAGE_KEY, createDefaultAuditFilters, createDefaultJobForm, createEmptyAuthForm, createJobFormFromRow, DEFAULT_PAGE_STATE } from "./state/dashboard-state.js";
-import { AuthStrip, type DashboardView, Sidebar, Toolbar } from "./shell.js";
 import type { ApiKeyRow, AuditEvent, AuthResponse, AuthUser, CreatedApiKey, ExecutionRow, JobRow, MetricsOverview, NewJobFormState, PageResponse, ServiceHealthMap, WorkerRow } from "./types.js";
-import { DashboardViews } from "./views.js";
 
 export function App() {
   const [apiBaseUrl, setApiBaseUrl] = React.useState("http://localhost:3000");

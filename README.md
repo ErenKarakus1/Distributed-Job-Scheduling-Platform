@@ -221,6 +221,8 @@ frontend/
     src/
       api/               Dashboard API client and request builders
       components/        Shared dashboard panels and controls
+      layouts/           Dashboard shell, sidebar, toolbar, and signed-in strip
+      pages/             Login/register page and dashboard view composition
       state/             Dashboard state helpers
       app.tsx            Main dashboard application
 docker-compose.yml       Full local platform stack

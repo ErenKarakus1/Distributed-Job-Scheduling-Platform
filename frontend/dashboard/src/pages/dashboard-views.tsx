@@ -1,7 +1,7 @@
-import { ApiKeyPanel, AuditPanel, DataPanel, FilterBar, OverviewPanel, Pager, UserPanel, WorkerPanel } from "./components.js";
-import { ApiKeyCreateForm, AuditFilterBar, JobCreateForm } from "./forms.js";
-import type { DashboardView } from "./shell.js";
-import type { ApiKeyRow, AuditEvent, AuditFilters, AuthUser, CreatedApiKey, ExecutionRow, JobRow, MetricsOverview, NewJobFormState, PageState, ServiceHealthMap, WorkerRow } from "./types.js";
+import { ApiKeyPanel, AuditPanel, DataPanel, FilterBar, OverviewPanel, Pager, UserPanel, WorkerPanel } from "../components/index.js";
+import { ApiKeyCreateForm, AuditFilterBar, JobCreateForm } from "../forms.js";
+import type { DashboardView } from "../layouts/dashboard-shell.js";
+import type { ApiKeyRow, AuditEvent, AuditFilters, AuthUser, CreatedApiKey, ExecutionRow, JobRow, MetricsOverview, NewJobFormState, PageState, ServiceHealthMap, WorkerRow } from "../types.js";
 
 type DashboardViewsProps = {
   activeView: DashboardView;
