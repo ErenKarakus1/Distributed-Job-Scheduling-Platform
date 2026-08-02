@@ -545,6 +545,19 @@ textarea {
   font-weight: 800;
 }
 
+.locked-role {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  padding: 0 10px;
+  border: 1px solid #d8e0eb;
+  border-radius: 6px;
+  color: #53627a;
+  background: #f8fafc;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .metadata-cell {
   max-width: 260px;
   font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;

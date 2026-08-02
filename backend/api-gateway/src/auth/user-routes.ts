@@ -9,6 +9,10 @@ type UserRouteDependencies = {
   requireAdminUser: express.RequestHandler;
 };
 
+export function isSelfRoleChange(currentUserId: string | undefined, targetUserId: string) {
+  return currentUserId === targetUserId;
+}
+
 export function registerUserRoutes(app: express.Express, deps: UserRouteDependencies) {
   const { prisma, requireAdminUser } = deps;
 
@@ -36,6 +40,12 @@ export function registerUserRoutes(app: express.Express, deps: UserRouteDependen
     try {
       const id = parseRouteId(routeParam(req.params.id) ?? "");
       const data = updateUserRoleSchema.parse(req.body);
+
+      if (isSelfRoleChange(res.locals.user?.id, id)) {
+        res.status(409).json({ error: "You cannot change your own role" });
+        return;
+      }
+
       const user = await prisma.user.update({
         where: { id },
         data: { role: data.role },

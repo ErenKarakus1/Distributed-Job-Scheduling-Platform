@@ -97,7 +97,7 @@ export function DeadLetterPanel(props: { rows: DeadLetterRow[]; summary: DeadLet
   );
 }
 
-export function UserPanel(props: { rows: AuthUser[]; onRoleChange: (userId: string, role: "ADMIN" | "VIEWER") => void }) {
+export function UserPanel(props: { currentUserId: string; rows: AuthUser[]; onRoleChange: (userId: string, role: "ADMIN" | "VIEWER") => void }) {
   return (
     <section className="panel">
       <h2>Users</h2>
@@ -115,19 +115,27 @@ export function UserPanel(props: { rows: AuthUser[]; onRoleChange: (userId: stri
               </tr>
             </thead>
             <tbody>
-              {props.rows.map((user) => (
-                <tr key={user.id}>
-                  <td>{user.email}</td>
-                  <td>{user.name}</td>
-                  <td>
-                    <select className="inline-select" value={user.role} onChange={(event) => props.onRoleChange(user.id, event.target.value as "ADMIN" | "VIEWER")}>
-                      <option value="ADMIN">ADMIN</option>
-                      <option value="VIEWER">VIEWER</option>
-                    </select>
-                  </td>
-                  <td>{user.id}</td>
-                </tr>
-              ))}
+              {props.rows.map((user) => {
+                const isCurrentUser = user.id === props.currentUserId;
+
+                return (
+                  <tr key={user.id}>
+                    <td>{user.email}</td>
+                    <td>{user.name}</td>
+                    <td>
+                      {isCurrentUser ? (
+                        <span className="locked-role">{user.role}</span>
+                      ) : (
+                        <select className="inline-select" value={user.role} onChange={(event) => props.onRoleChange(user.id, event.target.value as "ADMIN" | "VIEWER")}>
+                          <option value="ADMIN">ADMIN</option>
+                          <option value="VIEWER">VIEWER</option>
+                        </select>
+                      )}
+                    </td>
+                    <td>{user.id}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

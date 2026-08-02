@@ -140,7 +140,7 @@ export function DashboardViews(props: DashboardViewsProps) {
   }
 
   if (props.activeView === "users") {
-    return <UserPanel rows={props.users} onRoleChange={props.onUserRoleChange} />;
+    return <UserPanel currentUserId={props.authUser.id} rows={props.users} onRoleChange={props.onUserRoleChange} />;
   }
 
   if (props.activeView === "apiKeys") {
