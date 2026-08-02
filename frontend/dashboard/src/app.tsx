@@ -1,6 +1,7 @@
 import React from "react";
 import { createApiClient } from "./api/client.js";
 import { createAuditParams, createJobRequestBody, createPageParams } from "./api/dashboard-requests.js";
+import { AuthPage } from "./components/auth-page.js";
 import { AUTH_TOKEN_STORAGE_KEY, createDefaultAuditFilters, createDefaultJobForm, createEmptyAuthForm, createJobFormFromRow, DEFAULT_PAGE_STATE } from "./state/dashboard-state.js";
 import { AuthStrip, type DashboardView, Sidebar, Toolbar } from "./shell.js";
 import type { ApiKeyRow, AuditEvent, AuthResponse, AuthUser, CreatedApiKey, ExecutionRow, JobRow, MetricsOverview, NewJobFormState, PageResponse, ServiceHealthMap, WorkerRow } from "./types.js";
@@ -288,6 +289,7 @@ export function App() {
     localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
     setAuthToken("");
     setAuthUser(null);
+    setAuthForm(createEmptyAuthForm());
     setMessage("Signed out");
   }
 
@@ -304,6 +306,22 @@ export function App() {
     }
   }
 
+  if (!authUser) {
+    return (
+      <AuthPage
+        apiBaseUrl={apiBaseUrl}
+        authForm={authForm}
+        authMode={authMode}
+        isRestoringSession={Boolean(authToken)}
+        message={message}
+        onApiBaseUrlChange={setApiBaseUrl}
+        onAuthFormChange={setAuthForm}
+        onAuthModeChange={setAuthMode}
+        onSubmit={(event) => void submitAuth(event)}
+      />
+    );
+  }
+
   return (
     <main className="app-shell">
       <Sidebar activeView={activeView} onViewChange={setActiveView} />
@@ -312,13 +330,8 @@ export function App() {
         <Toolbar apiBaseUrl={apiBaseUrl} apiKey={apiKey} onApiBaseUrlChange={setApiBaseUrl} onApiKeyChange={setApiKey} onRefresh={() => void refreshCurrentView()} />
 
         <AuthStrip
-          authForm={authForm}
-          authMode={authMode}
           authUser={authUser}
-          onAuthFormChange={setAuthForm}
-          onAuthModeChange={setAuthMode}
           onSignOut={signOut}
-          onSubmit={(event) => void submitAuth(event)}
         />
 
         <div className="status-line">{message}</div>

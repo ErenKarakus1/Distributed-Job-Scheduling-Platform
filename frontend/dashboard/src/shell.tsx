@@ -61,20 +61,9 @@ export function Toolbar(props: ToolbarProps) {
   );
 }
 
-type AuthFormState = {
-  email: string;
-  name: string;
-  password: string;
-};
-
 type AuthStripProps = {
-  authForm: AuthFormState;
-  authMode: "login" | "register";
   authUser: AuthUser | null;
-  onAuthFormChange: (authForm: AuthFormState) => void;
-  onAuthModeChange: (authMode: "login" | "register") => void;
   onSignOut: () => void;
-  onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
 };
 
 export function AuthStrip(props: AuthStripProps) {
@@ -89,32 +78,5 @@ export function AuthStrip(props: AuthStripProps) {
     );
   }
 
-  return (
-    <section className="auth-strip">
-      <form className="auth-form" onSubmit={props.onSubmit}>
-        <select value={props.authMode} onChange={(event) => props.onAuthModeChange(event.target.value as "login" | "register")}>
-          <option value="login">Login</option>
-          <option value="register">Register</option>
-        </select>
-        <input
-          value={props.authForm.email}
-          onChange={(event) => props.onAuthFormChange({ ...props.authForm, email: event.target.value })}
-          placeholder="Email"
-          type="email"
-          required
-        />
-        {props.authMode === "register" && (
-          <input value={props.authForm.name} onChange={(event) => props.onAuthFormChange({ ...props.authForm, name: event.target.value })} placeholder="Name" required />
-        )}
-        <input
-          value={props.authForm.password}
-          onChange={(event) => props.onAuthFormChange({ ...props.authForm, password: event.target.value })}
-          placeholder="Password"
-          type="password"
-          required
-        />
-        <button type="submit">{props.authMode === "login" ? "Sign in" : "Create"}</button>
-      </form>
-    </section>
-  );
+  return null;
 }
