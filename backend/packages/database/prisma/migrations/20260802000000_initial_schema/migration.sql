@@ -22,6 +22,9 @@ CREATE TYPE "AttemptStatus" AS ENUM ('RUNNING', 'SUCCEEDED', 'FAILED', 'TIMED_OU
 -- CreateEnum
 CREATE TYPE "WorkerStatus" AS ENUM ('IDLE', 'BUSY', 'OFFLINE');
 
+-- CreateEnum
+CREATE TYPE "UserRole" AS ENUM ('ADMIN', 'VIEWER');
+
 -- CreateTable
 CREATE TABLE "api_keys" (
     "id" TEXT NOT NULL,
@@ -31,6 +34,35 @@ CREATE TABLE "api_keys" (
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "api_keys_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "users" (
+    "id" TEXT NOT NULL,
+    "email" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "passwordHash" TEXT NOT NULL,
+    "role" "UserRole" NOT NULL DEFAULT 'ADMIN',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "users_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "audit_events" (
+    "id" TEXT NOT NULL,
+    "actorType" TEXT NOT NULL,
+    "actorId" TEXT,
+    "actorLabel" TEXT,
+    "action" TEXT NOT NULL,
+    "resourceType" TEXT NOT NULL,
+    "resourceId" TEXT,
+    "requestId" TEXT,
+    "metadata" JSONB,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "audit_events_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -111,6 +143,7 @@ CREATE TABLE "workers" (
     "status" "WorkerStatus" NOT NULL DEFAULT 'IDLE',
     "lastHeartbeatAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "currentExecutionId" TEXT,
+    "activeExecutionCount" INTEGER NOT NULL DEFAULT 0,
     "startedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -119,6 +152,18 @@ CREATE TABLE "workers" (
 
 -- CreateIndex
 CREATE UNIQUE INDEX "api_keys_keyHash_key" ON "api_keys"("keyHash");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
+
+-- CreateIndex
+CREATE INDEX "audit_events_createdAt_idx" ON "audit_events"("createdAt");
+
+-- CreateIndex
+CREATE INDEX "audit_events_actorType_actorId_idx" ON "audit_events"("actorType", "actorId");
+
+-- CreateIndex
+CREATE INDEX "audit_events_resourceType_resourceId_idx" ON "audit_events"("resourceType", "resourceId");
 
 -- CreateIndex
 CREATE INDEX "jobs_status_type_idx" ON "jobs"("status", "type");
@@ -167,4 +212,3 @@ ALTER TABLE "execution_attempts" ADD CONSTRAINT "execution_attempts_executionId_
 
 -- AddForeignKey
 ALTER TABLE "execution_attempts" ADD CONSTRAINT "execution_attempts_workerId_fkey" FOREIGN KEY ("workerId") REFERENCES "workers"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
