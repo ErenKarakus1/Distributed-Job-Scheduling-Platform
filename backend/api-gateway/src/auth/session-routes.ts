@@ -1,7 +1,7 @@
 import express from "express";
 import type { PrismaClient } from "@prisma/client";
 import { hashPassword, verifyPassword } from "./auth.js";
-import { hasPrismaCode, hideDevelopmentRoute, sendZodError } from "./auth-route-utils.js";
+import { hasPrismaCode, sendZodError } from "./auth-route-utils.js";
 import { loginSchema, registerSchema } from "../validation.js";
 
 type SignUserToken = (user: { id: string; email: string; role: string }) => string;
@@ -17,14 +17,13 @@ export function registerSessionRoutes(app: express.Express, deps: SessionRouteDe
 
   app.post("/auth/register", async (req, res, next) => {
     try {
-      if (hideDevelopmentRoute(res)) return;
-
       const data = registerSchema.parse(req.body);
       const user = await prisma.user.create({
         data: {
           email: data.email,
           name: data.name,
           passwordHash: await hashPassword(data.password),
+          role: "VIEWER",
         },
         select: {
           id: true,
