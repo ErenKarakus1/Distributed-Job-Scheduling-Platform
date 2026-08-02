@@ -1,6 +1,5 @@
 type ApiClientOptions = {
   apiBaseUrl: string;
-  apiKey: string;
   authToken: string;
 };
 
@@ -60,14 +59,13 @@ async function readJsonResponse<T>(response: Response) {
 }
 
 export function createApiClient(options: ApiClientOptions) {
-  const { apiBaseUrl, apiKey, authToken } = options;
+  const { apiBaseUrl, authToken } = options;
 
   async function request<T>(path: string, requestOptions: RequestInit = {}) {
     const response = await fetch(`${apiBaseUrl}${path}`, {
       ...requestOptions,
       headers: {
-        ...(apiKey ? { "x-api-key": apiKey } : {}),
-        ...(!apiKey && authToken ? { authorization: `Bearer ${authToken}` } : {}),
+        ...(authToken ? { authorization: `Bearer ${authToken}` } : {}),
         ...(requestOptions.body ? { "content-type": "application/json" } : {}),
         ...requestOptions.headers,
       },

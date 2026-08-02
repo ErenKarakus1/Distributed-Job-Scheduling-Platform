@@ -1,4 +1,4 @@
-import type { ApiKeyRow, AuditEvent, AuthUser, CreatedApiKey, WorkerRow } from "../types.js";
+import type { ApiKeyRow, AuditEvent, AuthUser, CreatedApiKey, ServiceHealthMap, WorkerRow } from "../types.js";
 
 export function WorkerPanel(props: { rows: WorkerRow[] }) {
   return (
@@ -155,6 +155,49 @@ export function AuditPanel(props: { rows: AuditEvent[] }) {
                   <td className="metadata-cell">{event.metadata ? JSON.stringify(event.metadata) : "-"}</td>
                 </tr>
               ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+export function HealthPanel(props: { health: ServiceHealthMap }) {
+  const entries = Object.entries(props.health);
+
+  return (
+    <section className="panel">
+      <h2>Service Health</h2>
+      {entries.length === 0 ? (
+        <p className="empty-state">No service health loaded</p>
+      ) : (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Service</th>
+                <th>HTTP</th>
+                <th>Status</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map(([service, result]) => {
+                const status = result.body?.status ?? (result.statusCode >= 200 && result.statusCode < 300 ? "ok" : "error");
+                const details = result.error ?? result.body?.service ?? JSON.stringify(result.body ?? {});
+
+                return (
+                  <tr key={service}>
+                    <td>{service}</td>
+                    <td>{result.statusCode}</td>
+                    <td>
+                      <span className={`status-pill ${String(status).toLowerCase()}`}>{status}</span>
+                    </td>
+                    <td>{details || "-"}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

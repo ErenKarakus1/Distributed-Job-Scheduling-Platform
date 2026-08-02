@@ -195,9 +195,9 @@ h2 {
 
 .toolbar {
   display: grid;
-  grid-template-columns: minmax(220px, 360px) minmax(220px, 1fr) 120px;
+  grid-template-columns: 1fr 120px;
   gap: 12px;
-  align-items: end;
+  align-items: center;
 }
 
 label {

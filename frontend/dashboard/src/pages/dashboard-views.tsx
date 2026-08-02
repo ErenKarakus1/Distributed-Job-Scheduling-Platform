@@ -1,4 +1,4 @@
-import { ApiKeyPanel, AuditPanel, DataPanel, FilterBar, OverviewPanel, Pager, UserPanel, WorkerPanel } from "../components/index.js";
+import { ApiKeyPanel, AuditPanel, DataPanel, FilterBar, HealthPanel, OverviewPanel, Pager, UserPanel, WorkerPanel } from "../components/index.js";
 import { ApiKeyCreateForm, AuditFilterBar, JobCreateForm } from "../forms.js";
 import type { DashboardView } from "../layouts/dashboard-shell.js";
 import type { ApiKeyRow, AuditEvent, AuditFilters, AuthUser, CreatedApiKey, ExecutionRow, JobRow, MetricsOverview, NewJobFormState, PageState, ServiceHealthMap, WorkerRow } from "../types.js";
@@ -123,10 +123,5 @@ export function DashboardViews(props: DashboardViewsProps) {
     );
   }
 
-  return (
-    <section className="panel">
-      <h2>Service Health</h2>
-      <pre>{JSON.stringify(props.health, null, 2)}</pre>
-    </section>
-  );
+  return <HealthPanel health={props.health} />;
 }

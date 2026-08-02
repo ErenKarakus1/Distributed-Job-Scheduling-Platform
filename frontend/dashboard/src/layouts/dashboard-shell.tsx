@@ -41,24 +41,16 @@ export function Sidebar(props: SidebarProps) {
 }
 
 type ToolbarProps = {
-  apiBaseUrl: string;
-  apiKey: string;
-  onApiBaseUrlChange: (apiBaseUrl: string) => void;
-  onApiKeyChange: (apiKey: string) => void;
   onRefresh: () => void;
 };
 
 export function Toolbar(props: ToolbarProps) {
   return (
     <header className="toolbar">
-      <label>
-        Gateway
-        <input value={props.apiBaseUrl} onChange={(event) => props.onApiBaseUrlChange(event.target.value)} />
-      </label>
-      <label>
-        API key
-        <input value={props.apiKey} onChange={(event) => props.onApiKeyChange(event.target.value)} type="password" />
-      </label>
+      <div>
+        <p className="eyebrow">Dashboard</p>
+        <h2>Control Plane</h2>
+      </div>
       <button onClick={props.onRefresh}>Refresh</button>
     </header>
   );

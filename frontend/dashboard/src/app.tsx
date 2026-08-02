@@ -10,8 +10,7 @@ import type { ApiKeyRow, AuditEvent, AuthResponse, AuthUser, CreatedApiKey, Exec
 const defaultApiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000";
 
 export function App() {
-  const [apiBaseUrl, setApiBaseUrl] = React.useState(defaultApiBaseUrl);
-  const [apiKey, setApiKey] = React.useState("");
+  const apiBaseUrl = defaultApiBaseUrl;
   const [authToken, setAuthToken] = React.useState(() => localStorage.getItem(AUTH_TOKEN_STORAGE_KEY) ?? "");
   const [authUser, setAuthUser] = React.useState<AuthUser | null>(null);
   const [authMode, setAuthMode] = React.useState<"login" | "register">("login");
@@ -36,7 +35,7 @@ export function App() {
   const [health, setHealth] = React.useState<ServiceHealthMap>({});
   const [activeView, setActiveView] = React.useState<DashboardView>("overview");
   const [message, setMessage] = React.useState("Ready");
-  const { authRequest, request } = React.useMemo(() => createApiClient({ apiBaseUrl, apiKey, authToken }), [apiBaseUrl, apiKey, authToken]);
+  const { authRequest, request } = React.useMemo(() => createApiClient({ apiBaseUrl, authToken }), [apiBaseUrl, authToken]);
 
   React.useEffect(() => {
     if (!authToken) {
@@ -53,6 +52,18 @@ export function App() {
       setActiveView("overview");
       setMessage("Admin role is required");
     }
+  }, [activeView, authUser]);
+
+  React.useEffect(() => {
+    if (!authUser) {
+      return;
+    }
+
+    if (authUser.role !== "ADMIN" && (activeView === "users" || activeView === "apiKeys")) {
+      return;
+    }
+
+    void refreshCurrentView();
   }, [activeView, authUser]);
 
   async function loadCurrentUser(token = authToken) {
@@ -334,7 +345,7 @@ export function App() {
       <Sidebar activeView={activeView} authUser={authUser} onViewChange={setActiveView} />
 
       <section className="workspace">
-        <Toolbar apiBaseUrl={apiBaseUrl} apiKey={apiKey} onApiBaseUrlChange={setApiBaseUrl} onApiKeyChange={setApiKey} onRefresh={() => void refreshCurrentView()} />
+        <Toolbar onRefresh={() => void refreshCurrentView()} />
 
         <AuthStrip
           authUser={authUser}
