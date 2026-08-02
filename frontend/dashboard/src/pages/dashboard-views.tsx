@@ -24,6 +24,7 @@ type DashboardViewsProps = {
   auditFilters: AuditFilters;
   apiKeyName: string;
   apiKeys: ApiKeyRow[];
+  authUser: AuthUser;
   createdApiKey: CreatedApiKey | null;
   deadLetterPage: PageState;
   deadLetterSummary: DeadLetterSummary;
@@ -68,14 +69,16 @@ type DashboardViewsProps = {
 };
 
 export function DashboardViews(props: DashboardViewsProps) {
+  const isAdmin = props.authUser.role === "ADMIN";
+
   if (props.activeView === "overview") {
-    return <OverviewPanel metrics={props.metrics} onRecoverStalled={props.onRecoverStalled} onRunScheduler={props.onRunScheduler} />;
+    return <OverviewPanel canMutate={isAdmin} metrics={props.metrics} onRecoverStalled={props.onRecoverStalled} onRunScheduler={props.onRunScheduler} />;
   }
 
   if (props.activeView === "jobs") {
     return (
       <>
-        <JobCreateForm job={props.newJob} mode={props.editingJobId ? "edit" : "create"} onCancel={props.onCancelJobEdit} onChange={props.onJobChange} onSubmit={props.onCreateJob} />
+        {isAdmin && <JobCreateForm job={props.newJob} mode={props.editingJobId ? "edit" : "create"} onCancel={props.onCancelJobEdit} onChange={props.onJobChange} onSubmit={props.onCreateJob} />}
         <FilterBar
           label="Job status"
           value={props.jobStatusFilter}
@@ -87,7 +90,7 @@ export function DashboardViews(props: DashboardViewsProps) {
             props.onRefreshJobs(nextPage);
           }}
         />
-        <DataPanel title="Jobs" rows={props.jobs} emptyText="No jobs loaded" onJobAction={props.onJobAction} />
+        <DataPanel title="Jobs" rows={props.jobs} emptyText="No jobs loaded" onJobAction={isAdmin ? props.onJobAction : undefined} />
         <Pager page={props.jobPage} onChange={props.onJobPageChange} onApply={props.onRefreshJobs} />
       </>
     );
@@ -107,7 +110,7 @@ export function DashboardViews(props: DashboardViewsProps) {
             props.onRefreshExecutions(nextPage);
           }}
         />
-        <DataPanel title="Executions" rows={props.executions} emptyText="No executions loaded" expandableAttempts onExecutionAction={props.onExecutionAction} />
+        <DataPanel title="Executions" rows={props.executions} emptyText="No executions loaded" expandableAttempts onExecutionAction={isAdmin ? props.onExecutionAction : undefined} />
         <Pager page={props.executionPage} onChange={props.onExecutionPageChange} onApply={props.onRefreshExecutions} />
       </>
     );

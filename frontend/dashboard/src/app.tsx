@@ -29,6 +29,7 @@ export function App() {
   const apiBaseUrl = defaultApiBaseUrl;
   const [authToken, setAuthToken] = React.useState(() => localStorage.getItem(AUTH_TOKEN_STORAGE_KEY) ?? "");
   const [authUser, setAuthUser] = React.useState<AuthUser | null>(null);
+  const [isRestoringSession, setIsRestoringSession] = React.useState(Boolean(authToken));
   const [authMode, setAuthMode] = React.useState<"login" | "register">("login");
   const [authForm, setAuthForm] = React.useState(createEmptyAuthForm);
   const [newJob, setNewJob] = React.useState<NewJobFormState>(createDefaultJobForm);
@@ -59,9 +60,11 @@ export function App() {
   React.useEffect(() => {
     if (!authToken) {
       setAuthUser(null);
+      setIsRestoringSession(false);
       return;
     }
 
+    setIsRestoringSession(true);
     localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, authToken);
     void loadCurrentUser(authToken);
   }, [authToken, apiBaseUrl]);
@@ -93,6 +96,8 @@ export function App() {
       localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
       setAuthToken("");
       setAuthUser(null);
+    } finally {
+      setIsRestoringSession(false);
     }
   }
 
@@ -372,12 +377,12 @@ export function App() {
     }
   }
 
-  if (!authUser) {
+  if (!authUser || isRestoringSession) {
     return (
       <AuthPage
         authForm={authForm}
         authMode={authMode}
-        isRestoringSession={Boolean(authToken)}
+        isRestoringSession={isRestoringSession}
         message={message}
         onAuthFormChange={setAuthForm}
         onAuthModeChange={setAuthMode}
@@ -404,6 +409,7 @@ export function App() {
           activeView={activeView}
           apiKeyName={apiKeyName}
           apiKeys={apiKeys}
+          authUser={authUser}
           auditEvents={auditEvents}
           auditFilters={auditFilters}
           createdApiKey={createdApiKey}

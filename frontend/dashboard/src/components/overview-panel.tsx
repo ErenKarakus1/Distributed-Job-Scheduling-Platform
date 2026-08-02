@@ -1,6 +1,6 @@
 import type { MetricsOverview } from "../types.js";
 
-export function OverviewPanel(props: { metrics: MetricsOverview; onRecoverStalled: () => void; onRunScheduler: () => void }) {
+export function OverviewPanel(props: { canMutate: boolean; metrics: MetricsOverview; onRecoverStalled: () => void; onRunScheduler: () => void }) {
   const jobs = props.metrics.jobs ?? {};
   const executions = props.metrics.executions ?? {};
   const workers = props.metrics.workers ?? {};
@@ -20,10 +20,12 @@ export function OverviewPanel(props: { metrics: MetricsOverview; onRecoverStalle
 
   return (
     <>
-      <section className="operation-bar">
-        <button onClick={props.onRunScheduler}>Run Scheduler</button>
-        <button onClick={props.onRecoverStalled}>Recover Stalled</button>
-      </section>
+      {props.canMutate && (
+        <section className="operation-bar">
+          <button onClick={props.onRunScheduler}>Run Scheduler</button>
+          <button onClick={props.onRecoverStalled}>Recover Stalled</button>
+        </section>
+      )}
       <section className="metric-grid" aria-label="Platform overview">
         {cards.map(([label, value]) => (
           <article className="metric-card" key={label}>

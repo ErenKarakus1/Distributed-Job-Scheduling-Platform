@@ -161,7 +161,7 @@ Dashboard users authenticate with email and password. Login returns a JWT that t
 JWT roles:
 
 - `ADMIN` - can read and mutate jobs, executions, scheduling, recovery, dead letters, users, and API keys
-- `VIEWER` - can read dashboard data
+- `VIEWER` - can read non-sensitive dashboard data without mutation controls
 
 ### API Keys
 
