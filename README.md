@@ -283,6 +283,8 @@ Default RabbitMQ credentials:
 scheduler / scheduler
 ```
 
+The dashboard opens to a dedicated login/register page. Docker Compose bootstraps the default admin account from `ADMIN_EMAIL`, `ADMIN_NAME`, and `ADMIN_PASSWORD`.
+
 Docker Compose starts:
 
 - `dashboard` - React dashboard served by Nginx
@@ -498,6 +500,10 @@ Open:
 - API Gateway: http://localhost:3000
 - Health check: http://localhost:3000/health
 - RabbitMQ management: http://localhost:15672
+
+The dashboard opens to a dedicated login/register page. Use the admin account created by `npm run bootstrap:admin`, or register a development user from the dashboard.
+
+On Windows, if Vite dev mode exits with an esbuild access error from a OneDrive or Desktop path, clone the repository into a regular folder such as `C:\Projects\Distributed-Job-Scheduling-Platform` and run `npm run dev:dashboard` from there.
 
 ## API Examples
 
