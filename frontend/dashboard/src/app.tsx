@@ -48,6 +48,13 @@ export function App() {
     void loadCurrentUser(authToken);
   }, [authToken, apiBaseUrl]);
 
+  React.useEffect(() => {
+    if (authUser?.role !== "ADMIN" && (activeView === "users" || activeView === "apiKeys")) {
+      setActiveView("overview");
+      setMessage("Admin role is required");
+    }
+  }, [activeView, authUser]);
+
   async function loadCurrentUser(token = authToken) {
     try {
       const body = await authRequest<{ user: AuthUser }>("/auth/me", {}, token);
@@ -324,7 +331,7 @@ export function App() {
 
   return (
     <main className="app-shell">
-      <Sidebar activeView={activeView} onViewChange={setActiveView} />
+      <Sidebar activeView={activeView} authUser={authUser} onViewChange={setActiveView} />
 
       <section className="workspace">
         <Toolbar apiBaseUrl={apiBaseUrl} apiKey={apiKey} onApiBaseUrlChange={setApiBaseUrl} onApiKeyChange={setApiKey} onRefresh={() => void refreshCurrentView()} />
