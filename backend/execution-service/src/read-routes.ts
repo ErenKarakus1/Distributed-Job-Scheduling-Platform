@@ -109,6 +109,12 @@ export function registerExecutionReadRoutes(app: express.Express, deps: ReadRout
                 jobId: true,
                 status: true,
                 attemptCount: true,
+                job: {
+                  select: {
+                    id: true,
+                    status: true,
+                  },
+                },
               },
             },
           },

@@ -8,6 +8,7 @@ import type {
   ServiceHealthMap,
   WorkerRow,
 } from "../types.js";
+import { canRequeueDeadLetter } from "./data-panel.js";
 import { formatDateTime } from "../utils/dates.js";
 
 export function WorkerPanel(props: { rows: WorkerRow[] }) {
@@ -91,29 +92,35 @@ export function DeadLetterPanel(props: {
               </tr>
             </thead>
             <tbody>
-              {props.rows.map((message) => (
-                <tr key={message.id}>
-                  <td>{formatDateTime(message.createdAt)}</td>
-                  <td>{message.reason}</td>
-                  <td>{message.executionId ?? "-"}</td>
-                  <td>{message.execution?.jobId ?? "-"}</td>
-                  <td>{message.sourceQueue}</td>
-                  <td>{message.error ?? "-"}</td>
-                  <td className="metadata-cell">
-                    {JSON.stringify(message.payload)}
-                  </td>
-                  <td>
-                    <div className="row-actions">
-                      <button onClick={() => props.onRequeue(message.id)}>
-                        Requeue
-                      </button>
-                      <button onClick={() => props.onDiscard(message.id)}>
-                        Discard
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {props.rows.map((message) => {
+                const canRequeue = canRequeueDeadLetter(message);
+
+                return (
+                  <tr key={message.id}>
+                    <td>{formatDateTime(message.createdAt)}</td>
+                    <td>{message.reason}</td>
+                    <td>{message.executionId ?? "-"}</td>
+                    <td>{message.execution?.jobId ?? "-"}</td>
+                    <td>{message.sourceQueue}</td>
+                    <td>{message.error ?? "-"}</td>
+                    <td className="metadata-cell">
+                      {JSON.stringify(message.payload)}
+                    </td>
+                    <td>
+                      <div className="row-actions">
+                        {canRequeue && (
+                          <button onClick={() => props.onRequeue(message.id)}>
+                            Requeue
+                          </button>
+                        )}
+                        <button onClick={() => props.onDiscard(message.id)}>
+                          Discard
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

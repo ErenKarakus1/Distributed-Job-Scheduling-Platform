@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   canCancelExecution,
+  canRequeueDeadLetter,
   canRetryExecution,
   getJobRowActions,
 } from "./data-panel.js";
@@ -27,6 +28,59 @@ test("canRetryExecution allows failed and canceled executions", () => {
 test("canRetryExecution blocks executions for deleted jobs", () => {
   assert.equal(canRetryExecution("FAILED", "DELETED"), false);
   assert.equal(canRetryExecution("CANCELED", "DELETED"), false);
+});
+
+test("canRequeueDeadLetter requires a linked execution with an active job", () => {
+  assert.equal(
+    canRequeueDeadLetter({
+      id: "message-1",
+      executionId: null,
+      reason: "MALFORMED_MESSAGE",
+      payload: {},
+      sourceQueue: "execution.ready",
+      createdAt: "2026-08-02T12:00:00.000Z",
+      execution: null,
+    }),
+    false,
+  );
+
+  assert.equal(
+    canRequeueDeadLetter({
+      id: "message-2",
+      executionId: "execution-1",
+      reason: "MAX_ATTEMPTS_EXHAUSTED",
+      payload: {},
+      sourceQueue: "execution.ready",
+      createdAt: "2026-08-02T12:00:00.000Z",
+      execution: {
+        id: "execution-1",
+        jobId: "job-1",
+        status: "FAILED",
+        attemptCount: 1,
+        job: { id: "job-1", status: "DELETED" },
+      },
+    }),
+    false,
+  );
+
+  assert.equal(
+    canRequeueDeadLetter({
+      id: "message-3",
+      executionId: "execution-2",
+      reason: "MAX_ATTEMPTS_EXHAUSTED",
+      payload: {},
+      sourceQueue: "execution.ready",
+      createdAt: "2026-08-02T12:00:00.000Z",
+      execution: {
+        id: "execution-2",
+        jobId: "job-2",
+        status: "FAILED",
+        attemptCount: 1,
+        job: { id: "job-2", status: "ACTIVE" },
+      },
+    }),
+    true,
+  );
 });
 
 test("getJobRowActions exposes active job controls", () => {

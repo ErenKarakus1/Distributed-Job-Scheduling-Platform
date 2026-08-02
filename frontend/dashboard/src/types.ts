@@ -131,6 +131,10 @@ export type DeadLetterRow = {
     jobId: string;
     status: string;
     attemptCount: number;
+    job?: {
+      id: string;
+      status: string;
+    } | null;
   } | null;
 };
 

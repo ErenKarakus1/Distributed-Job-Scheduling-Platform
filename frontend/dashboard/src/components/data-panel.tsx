@@ -1,5 +1,5 @@
 import React from "react";
-import type { ExecutionAttempt, ExecutionRow, JobRow } from "../types.js";
+import type { DeadLetterRow, ExecutionAttempt, ExecutionRow, JobRow } from "../types.js";
 
 type DataPanelRow = JobRow | ExecutionRow;
 type JobAction = "run" | "pause" | "resume" | "edit" | "delete";
@@ -19,6 +19,13 @@ export function canRetryExecution(status: unknown, jobStatus?: unknown) {
   return (
     ["FAILED", "CANCELED"].includes(String(status)) &&
     String(jobStatus) !== "DELETED"
+  );
+}
+
+export function canRequeueDeadLetter(message: DeadLetterRow) {
+  return (
+    Boolean(message.executionId && message.execution) &&
+    message.execution?.job?.status !== "DELETED"
   );
 }
 
