@@ -139,7 +139,15 @@ export function registerExecutionCommandRoutes(
           throw new ExecutionNotFoundError();
         }
 
-        const attemptNumber = execution.attemptCount + 1;
+        const latestAttempt = await tx.executionAttempt.aggregate({
+          where: { executionId: execution.id },
+          _max: { attemptNumber: true },
+        });
+        const attemptNumber =
+          Math.max(
+            execution.attemptCount,
+            latestAttempt._max.attemptNumber ?? 0,
+          ) + 1;
         const attempt = await tx.executionAttempt.create({
           data: {
             executionId: execution.id,
@@ -157,7 +165,9 @@ export function registerExecutionCommandRoutes(
 
         const succeeded = data.status === "SUCCEEDED";
         const retryable =
-          !succeeded && attemptNumber < execution.job.maxAttempts;
+          !succeeded &&
+          execution.job.status === "ACTIVE" &&
+          attemptNumber < execution.job.maxAttempts;
         const nextAttemptAt = retryable
           ? new Date(
               finishedAt.getTime() +

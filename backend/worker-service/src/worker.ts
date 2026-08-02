@@ -52,7 +52,15 @@ export function createWorkerRuntime(deps: WorkerRuntimeDependencies) {
         return;
       }
 
-      const attemptNumber = execution.attemptCount + 1;
+      const latestAttempt = await tx.executionAttempt.aggregate({
+        where: { executionId: input.executionId },
+        _max: { attemptNumber: true },
+      });
+      const attemptNumber =
+        Math.max(
+          execution.attemptCount,
+          latestAttempt._max.attemptNumber ?? 0,
+        ) + 1;
       const retryable =
         input.status !== "SUCCEEDED" &&
         execution.job.status === "ACTIVE" &&

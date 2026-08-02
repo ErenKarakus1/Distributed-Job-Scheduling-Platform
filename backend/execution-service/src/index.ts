@@ -89,8 +89,19 @@ async function recoverStalledExecutions(now = new Date()) {
         return;
       }
 
+      const latestAttempt = await tx.executionAttempt.aggregate({
+        where: { executionId: current.id },
+        _max: { attemptNumber: true },
+      });
+      const normalizedCurrent = {
+        ...current,
+        attemptCount: Math.max(
+          current.attemptCount,
+          latestAttempt._max.attemptNumber ?? 0,
+        ),
+      };
       const recovery = planStalledExecutionRecovery(
-        current,
+        normalizedCurrent,
         now,
         stalledAfterMs,
       );
