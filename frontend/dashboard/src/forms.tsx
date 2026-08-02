@@ -1,5 +1,29 @@
 import type { AuditFilters, NewJobFormState } from "./types.js";
 
+const fallbackTimezones = [
+  "UTC",
+  "Europe/Istanbul",
+  "Europe/London",
+  "Europe/Berlin",
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Los_Angeles",
+  "Asia/Dubai",
+  "Asia/Tokyo",
+  "Australia/Sydney",
+];
+
+function getTimezoneOptions() {
+  const intlWithTimezones = Intl as typeof Intl & {
+    supportedValuesOf?: (key: "timeZone") => string[];
+  };
+
+  return intlWithTimezones.supportedValuesOf?.("timeZone") ?? fallbackTimezones;
+}
+
+const timezoneOptions = getTimezoneOptions();
+
 type ApiKeyCreateFormProps = {
   name: string;
   onChange: (name: string) => void;
@@ -109,6 +133,13 @@ export function JobCreateForm(props: JobCreateFormProps) {
 
         <fieldset className="job-form-section">
           <legend>Schedule</legend>
+          {job.type === "RECURRING" && (
+            <datalist id="timezone-options">
+              {timezoneOptions.map((timezone) => (
+                <option key={timezone} value={timezone} />
+              ))}
+            </datalist>
+          )}
           <div className="job-form-grid schedule-grid">
             {job.type === "ONE_TIME" ? (
               <label>
@@ -137,6 +168,7 @@ export function JobCreateForm(props: JobCreateFormProps) {
                 <label>
                   Timezone
                   <input
+                    list="timezone-options"
                     value={job.timezone}
                     onChange={(event) =>
                       onChange({ ...job, timezone: event.target.value })

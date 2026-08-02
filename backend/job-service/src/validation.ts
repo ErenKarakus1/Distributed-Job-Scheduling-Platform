@@ -2,7 +2,13 @@ import { Prisma } from "@prisma/client";
 import { CronExpressionParser } from "cron-parser";
 import { z } from "zod";
 
-export const httpMethodSchema = z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]);
+export const httpMethodSchema = z.enum([
+  "GET",
+  "POST",
+  "PUT",
+  "PATCH",
+  "DELETE",
+]);
 export const jobTypeSchema = z.enum(["ONE_TIME", "RECURRING"]);
 export const jobStatusSchema = z.enum(["ACTIVE", "PAUSED", "DELETED"]);
 export const backoffTypeSchema = z.enum(["FIXED", "EXPONENTIAL"]);
@@ -11,14 +17,28 @@ export const paginationSchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
 });
 
-const jsonValueSchema = z.unknown().transform((value) => value as Prisma.InputJsonValue);
+const jsonValueSchema = z
+  .unknown()
+  .transform((value) => value as Prisma.InputJsonValue);
 
-export function isValidCronExpression(cronExpression: string, timezone: string) {
+export function isValidCronExpression(
+  cronExpression: string,
+  timezone: string,
+) {
   try {
     CronExpressionParser.parse(cronExpression, {
       currentDate: new Date(),
       tz: timezone,
     });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function isValidTimezone(timezone: string) {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: timezone });
     return true;
   } catch {
     return false;
@@ -64,12 +84,23 @@ export const createJobSchema = jobPayloadSchema.superRefine((job, ctx) => {
     });
   }
 
-  if (job.schedule && !isValidCronExpression(job.schedule.cronExpression, job.schedule.timezone)) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "cronExpression is invalid for the provided timezone",
-      path: ["schedule", "cronExpression"],
-    });
+  if (job.schedule) {
+    if (!isValidTimezone(job.schedule.timezone)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "timezone must be a valid IANA timezone, such as UTC or Europe/Istanbul",
+        path: ["schedule", "timezone"],
+      });
+    } else if (
+      !isValidCronExpression(job.schedule.cronExpression, job.schedule.timezone)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "cronExpression must be a valid cron expression",
+        path: ["schedule", "cronExpression"],
+      });
+    }
   }
 });
 
@@ -79,20 +110,39 @@ export const updateJobSchema = jobPayloadSchema
     status: jobStatusSchema.optional(),
   })
   .superRefine((job, ctx) => {
-    if (job.retryInitialDelayMs && job.retryMaxDelayMs && job.retryInitialDelayMs > job.retryMaxDelayMs) {
+    if (
+      job.retryInitialDelayMs &&
+      job.retryMaxDelayMs &&
+      job.retryInitialDelayMs > job.retryMaxDelayMs
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "retryInitialDelayMs must be less than or equal to retryMaxDelayMs",
+        message:
+          "retryInitialDelayMs must be less than or equal to retryMaxDelayMs",
         path: ["retryInitialDelayMs"],
       });
     }
 
-    if (job.schedule && !isValidCronExpression(job.schedule.cronExpression, job.schedule.timezone)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "cronExpression is invalid for the provided timezone",
-        path: ["schedule", "cronExpression"],
-      });
+    if (job.schedule) {
+      if (!isValidTimezone(job.schedule.timezone)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "timezone must be a valid IANA timezone, such as UTC or Europe/Istanbul",
+          path: ["schedule", "timezone"],
+        });
+      } else if (
+        !isValidCronExpression(
+          job.schedule.cronExpression,
+          job.schedule.timezone,
+        )
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "cronExpression must be a valid cron expression",
+          path: ["schedule", "cronExpression"],
+        });
+      }
     }
   });
 

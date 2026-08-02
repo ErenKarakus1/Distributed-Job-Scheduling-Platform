@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createJobSchema, paginationSchema, parseId, updateJobSchema } from "./validation.js";
+import {
+  createJobSchema,
+  paginationSchema,
+  parseId,
+  updateJobSchema,
+} from "./validation.js";
 
 const baseJob = {
   name: "Ping",
@@ -41,7 +46,33 @@ test("createJobSchema validates recurring cron expressions", () => {
   });
 
   assert.equal(result.success, false);
-  assert.equal(result.error.issues[0]?.path.join("."), "schedule.cronExpression");
+  assert.equal(
+    result.error.issues[0]?.path.join("."),
+    "schedule.cronExpression",
+  );
+  assert.equal(
+    result.error.issues[0]?.message,
+    "cronExpression must be a valid cron expression",
+  );
+});
+
+test("createJobSchema reports invalid recurring timezones on the timezone field", () => {
+  const result = createJobSchema.safeParse({
+    ...baseJob,
+    type: "RECURRING",
+    schedule: {
+      cronExpression: "*/5 * * * *",
+      timezone: "Not/A_Timezone",
+      nextRunAt: "2026-08-02T12:00:00.000Z",
+    },
+  });
+
+  assert.equal(result.success, false);
+  assert.equal(result.error.issues[0]?.path.join("."), "schedule.timezone");
+  assert.equal(
+    result.error.issues[0]?.message,
+    "timezone must be a valid IANA timezone, such as UTC or Europe/Istanbul",
+  );
 });
 
 test("updateJobSchema rejects retry delay ranges that cannot back off", () => {
