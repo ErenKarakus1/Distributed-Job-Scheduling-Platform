@@ -414,6 +414,7 @@ EXECUTION_SERVICE_PORT=3002
 SCHEDULER_SERVICE_PORT=3003
 WORKER_SERVICE_PORT=3004
 CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+VITE_API_BASE_URL=http://localhost:3000
 ```
 
 ### Worker and scheduler configuration

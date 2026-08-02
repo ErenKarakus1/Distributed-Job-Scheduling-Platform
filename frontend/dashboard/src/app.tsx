@@ -7,8 +7,10 @@ import { DashboardViews } from "./pages/dashboard-views.js";
 import { AUTH_TOKEN_STORAGE_KEY, createDefaultAuditFilters, createDefaultJobForm, createEmptyAuthForm, createJobFormFromRow, DEFAULT_PAGE_STATE } from "./state/dashboard-state.js";
 import type { ApiKeyRow, AuditEvent, AuthResponse, AuthUser, CreatedApiKey, ExecutionRow, JobRow, MetricsOverview, NewJobFormState, PageResponse, ServiceHealthMap, WorkerRow } from "./types.js";
 
+const defaultApiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000";
+
 export function App() {
-  const [apiBaseUrl, setApiBaseUrl] = React.useState("http://localhost:3000");
+  const [apiBaseUrl, setApiBaseUrl] = React.useState(defaultApiBaseUrl);
   const [apiKey, setApiKey] = React.useState("");
   const [authToken, setAuthToken] = React.useState(() => localStorage.getItem(AUTH_TOKEN_STORAGE_KEY) ?? "");
   const [authUser, setAuthUser] = React.useState<AuthUser | null>(null);
@@ -309,12 +311,10 @@ export function App() {
   if (!authUser) {
     return (
       <AuthPage
-        apiBaseUrl={apiBaseUrl}
         authForm={authForm}
         authMode={authMode}
         isRestoringSession={Boolean(authToken)}
         message={message}
-        onApiBaseUrlChange={setApiBaseUrl}
         onAuthFormChange={setAuthForm}
         onAuthModeChange={setAuthMode}
         onSubmit={(event) => void submitAuth(event)}

@@ -7,12 +7,10 @@ type AuthFormState = {
 };
 
 type AuthPageProps = {
-  apiBaseUrl: string;
   authForm: AuthFormState;
   authMode: "login" | "register";
   isRestoringSession: boolean;
   message: string;
-  onApiBaseUrlChange: (apiBaseUrl: string) => void;
   onAuthFormChange: (authForm: AuthFormState) => void;
   onAuthModeChange: (authMode: "login" | "register") => void;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
@@ -45,11 +43,6 @@ export function AuthPage(props: AuthPageProps) {
         </div>
 
         <form className="auth-page-form" onSubmit={props.onSubmit}>
-          <label>
-            Gateway
-            <input value={props.apiBaseUrl} onChange={(event) => props.onApiBaseUrlChange(event.target.value)} />
-          </label>
-
           <label>
             Email
             <input value={props.authForm.email} onChange={(event) => props.onAuthFormChange({ ...props.authForm, email: event.target.value })} type="email" required />

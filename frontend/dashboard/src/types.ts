@@ -1,3 +1,5 @@
+/// <reference types="vite/client" />
+
 export type AuthUser = {
   id: string;
   email: string;
