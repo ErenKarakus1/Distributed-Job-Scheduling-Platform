@@ -503,8 +503,6 @@ Open:
 
 The dashboard opens to a dedicated login/register page. Use the admin account created by `npm run bootstrap:admin`, or register a development user from the dashboard.
 
-On Windows, if Vite dev mode exits with an esbuild access error from a OneDrive or Desktop path, clone the repository into a regular folder such as `C:\Projects\Distributed-Job-Scheduling-Platform` and run `npm run dev:dashboard` from there.
-
 ## API Examples
 
 The multiline `curl` examples use Unix-style line continuations with `\`.
