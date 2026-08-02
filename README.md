@@ -110,7 +110,7 @@ Jobs are stored durably in PostgreSQL. A job can be either:
 - `ONE_TIME` - runs once at a configured `runAt` time
 - `RECURRING` - runs repeatedly from a cron expression and timezone
 
-The scheduler service scans for due jobs and creates execution records. Scheduler instances coordinate with a PostgreSQL advisory lock so multiple schedulers do not create the same due executions at the same time. Scheduler instances that cannot acquire the lock skip that polling run and try again later. Runnable executions are published to RabbitMQ through the `execution.ready` queue.
+The scheduler service scans for due jobs and creates execution records. Scheduler instances coordinate with a PostgreSQL advisory lock so multiple schedulers do not create the same due executions at the same time. Scheduler instances that cannot acquire the lock skip that polling run and try again later. Runnable executions are committed in PostgreSQL before being published to RabbitMQ through the `execution.ready` queue.
 
 Worker instances consume queued execution messages, mark executions as running, send heartbeat updates while work is active, perform the configured HTTP request with Axios, and record the attempt result.
 
@@ -834,6 +834,8 @@ Jobs, schedules, executions, attempts, workers, dead-letter messages, users, API
 ### RabbitMQ
 
 RabbitMQ handles runnable execution delivery to distributed workers. Workers can scale horizontally by adding more consumers to the same queue.
+
+The scheduler commits due execution records before publishing their RabbitMQ messages, so workers do not consume messages for execution rows that are still hidden inside an open database transaction.
 
 ### Scheduler Coordination
 
