@@ -12,6 +12,10 @@ type GatewayMiddlewareDependencies = {
   rateLimitWindowMs: number;
 };
 
+export function canAccessAdminRoute(user: { role?: string } | undefined) {
+  return user?.role === "ADMIN";
+}
+
 export function createGatewayMiddleware(deps: GatewayMiddlewareDependencies) {
   const { jwtSecret, prisma, rateLimitMaxRequests, rateLimitWindowMs, redis } = deps;
 
@@ -114,12 +118,7 @@ export function createGatewayMiddleware(deps: GatewayMiddlewareDependencies) {
   }
 
   function requireAdminUser(req: express.Request, res: express.Response, next: express.NextFunction) {
-    if (readApiKey(req)) {
-      next();
-      return;
-    }
-
-    if (res.locals.user?.role !== "ADMIN") {
+    if (!canAccessAdminRoute(res.locals.user)) {
       res.status(403).json({ error: "Admin role is required" });
       return;
     }

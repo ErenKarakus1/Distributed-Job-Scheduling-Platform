@@ -13,7 +13,7 @@
 
 A microservices-based distributed HTTP job scheduling platform for creating one-time and recurring jobs, executing them across workers, retrying failures, recovering stalled executions, tracking dead-lettered work, and monitoring execution history through an API and web dashboard.
 
-Developers can create HTTP jobs, schedule future or recurring runs, inspect attempts and response metadata, manually retry failed executions, recover stalled work, inspect and requeue dead-letter messages, manage dashboard users, authenticate with JWTs or API keys, and run the full platform locally with Docker Compose.
+Developers can create HTTP jobs, schedule future or recurring runs, inspect attempts and response metadata, manually retry failed executions, recover stalled work, inspect and requeue dead-letter messages, manage dashboard users, authenticate with JWTs or developer API keys, and run the full platform locally with Docker Compose.
 
 ## Table of Contents
 
@@ -165,7 +165,7 @@ JWT roles:
 
 ### API Keys
 
-API keys are intended for developer and service access. A valid API key can call protected API routes through the `x-api-key` header.
+API keys are intended for developer and service access to non-admin platform API routes. Admin-only mutations require an authenticated `ADMIN` JWT, not an API key.
 
 The gateway hashes API keys before storing them. Plain API key values are only returned when the key is created.
 
@@ -559,10 +559,11 @@ curl http://localhost:3000/api/jobs \
 ```bash
 curl -X POST http://localhost:3000/internal/api-keys \
   -H "content-type: application/json" \
+  -H "authorization: Bearer YOUR_ADMIN_JWT" \
   -d '{"name":"local-dev"}'
 ```
 
-Use the returned key:
+Use the returned key for non-admin API reads:
 
 ```bash
 curl http://localhost:3000/api/jobs \
@@ -574,7 +575,7 @@ curl http://localhost:3000/api/jobs \
 ```bash
 curl -X POST http://localhost:3000/api/jobs \
   -H "content-type: application/json" \
-  -H "x-api-key: djsp_your_key" \
+  -H "authorization: Bearer YOUR_ADMIN_JWT" \
   -d '{
     "name": "Ping example",
     "type": "ONE_TIME",
@@ -593,7 +594,7 @@ curl -X POST http://localhost:3000/api/jobs \
 ```bash
 curl -X POST http://localhost:3000/api/jobs \
   -H "content-type: application/json" \
-  -H "x-api-key: djsp_your_key" \
+  -H "authorization: Bearer YOUR_ADMIN_JWT" \
   -d '{
     "name": "Recurring ping",
     "type": "RECURRING",
@@ -611,28 +612,28 @@ curl -X POST http://localhost:3000/api/jobs \
 
 ```bash
 curl -X POST http://localhost:3000/api/jobs/JOB_ID/run \
-  -H "x-api-key: djsp_your_key"
+  -H "authorization: Bearer YOUR_ADMIN_JWT"
 ```
 
 ### Retry an execution
 
 ```bash
 curl -X POST http://localhost:3000/api/executions/EXECUTION_ID/retry \
-  -H "x-api-key: djsp_your_key"
+  -H "authorization: Bearer YOUR_ADMIN_JWT"
 ```
 
 ### Recover stalled executions
 
 ```bash
 curl -X POST http://localhost:3000/api/recover/stalled \
-  -H "x-api-key: djsp_your_key"
+  -H "authorization: Bearer YOUR_ADMIN_JWT"
 ```
 
 ### Run the scheduler once
 
 ```bash
 curl -X POST http://localhost:3000/api/schedule/run \
-  -H "x-api-key: djsp_your_key"
+  -H "authorization: Bearer YOUR_ADMIN_JWT"
 ```
 
 ## Main API Routes
@@ -836,7 +837,7 @@ Redis is used for fast coordination paths such as API rate limiting. Durable pla
 
 ### JWT and API Keys
 
-JWTs are used for dashboard sessions and role-aware access. API keys are used for developer and service-to-service access where a long-lived credential is more convenient than an interactive login.
+JWTs are used for dashboard sessions and role-aware admin access. API keys are used for non-admin developer and service-to-service access where a long-lived credential is more convenient than an interactive login.
 
 ### Retry and Recovery
 
