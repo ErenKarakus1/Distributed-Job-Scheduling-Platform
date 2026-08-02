@@ -1,7 +1,51 @@
+x-backend-environment: &backend-environment
+  NODE_ENV: production
+  DATABASE_URL: postgresql://scheduler:scheduler@postgres:5432/scheduler
+  RABBITMQ_URL: amqp://scheduler:scheduler@rabbitmq:5672
+  EXECUTION_READY_QUEUE: execution.ready
+  EXECUTION_DEAD_LETTER_EXCHANGE: execution.dead
+  EXECUTION_DEAD_LETTER_QUEUE: execution.dead
+  REDIS_URL: redis://redis:6379
+  JWT_SECRET: ${JWT_SECRET:-change-me-in-docker}
+  JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
+  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:8080,http://127.0.0.1:8080}
+  API_RATE_LIMIT_WINDOW_MS: ${API_RATE_LIMIT_WINDOW_MS:-60000}
+  API_RATE_LIMIT_MAX_REQUESTS: ${API_RATE_LIMIT_MAX_REQUESTS:-120}
+  JOB_SERVICE_URL: http://job-service:3001
+  EXECUTION_SERVICE_URL: http://execution-service:3002
+  SCHEDULER_SERVICE_URL: http://scheduler-service:3003
+  WORKER_SERVICE_URL: http://worker-service:3004
+  JOB_SERVICE_PORT: 3001
+  EXECUTION_SERVICE_PORT: 3002
+  SCHEDULER_SERVICE_PORT: 3003
+  WORKER_SERVICE_PORT: 3004
+  WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
+  SCHEDULER_POLL_INTERVAL_MS: ${SCHEDULER_POLL_INTERVAL_MS:-5000}
+  SCHEDULER_BATCH_SIZE: ${SCHEDULER_BATCH_SIZE:-50}
+  EXECUTION_STALLED_AFTER_MS: ${EXECUTION_STALLED_AFTER_MS:-60000}
+  EXECUTION_RECOVERY_INTERVAL_MS: ${EXECUTION_RECOVERY_INTERVAL_MS:-15000}
+  EXECUTION_RECOVERY_BATCH_SIZE: ${EXECUTION_RECOVERY_BATCH_SIZE:-50}
+
+x-backend-service: &backend-service
+  build:
+    context: .
+    dockerfile: backend/Dockerfile
+  environment:
+    <<: *backend-environment
+  depends_on:
+    postgres:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    migrations:
+      condition: service_completed_successfully
+  restart: unless-stopped
+
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: scheduler-postgres
     environment:
       POSTGRES_DB: scheduler
       POSTGRES_USER: scheduler
@@ -18,7 +62,6 @@ services:
 
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
-    container_name: scheduler-rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: scheduler
       RABBITMQ_DEFAULT_PASS: scheduler
@@ -33,7 +76,6 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: scheduler-redis
     ports:
       - "6379:6379"
     healthcheck:
@@ -41,6 +83,129 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  migrations:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://scheduler:scheduler@postgres:5432/scheduler
+    command: ["npx", "prisma", "migrate", "deploy", "--schema", "backend/packages/database/prisma/schema.prisma"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  admin-bootstrap:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://scheduler:scheduler@postgres:5432/scheduler
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      ADMIN_NAME: ${ADMIN_NAME:-Platform Admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change-me-admin-password}
+    command: ["node", "backend/api-gateway/dist/auth/bootstrap-admin.js"]
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+    restart: "no"
+
+  job-service:
+    <<: *backend-service
+    command: ["node", "backend/job-service/dist/index.js"]
+    ports:
+      - "3001:3001"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  execution-service:
+    <<: *backend-service
+    command: ["node", "backend/execution-service/dist/index.js"]
+    ports:
+      - "3002:3002"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3002/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  scheduler-service:
+    <<: *backend-service
+    command: ["node", "backend/scheduler-service/dist/index.js"]
+    ports:
+      - "3003:3003"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3003/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  worker-service:
+    <<: *backend-service
+    command: ["node", "backend/worker-service/dist/index.js"]
+    ports:
+      - "3004:3004"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
+      execution-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3004/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api-gateway:
+    <<: *backend-service
+    command: ["node", "backend/api-gateway/dist/index.js"]
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
+      admin-bootstrap:
+        condition: service_completed_successfully
+      job-service:
+        condition: service_healthy
+      execution-service:
+        condition: service_healthy
+      scheduler-service:
+        condition: service_healthy
+      worker-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: frontend/dashboard/Dockerfile
+    ports:
+      - "8080:80"
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   postgres-data:
