@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { AxiosError } from "axios";
 import { calculateBackoffDelayMs, getAttemptStatus, getAxiosErrorMessage } from "./execution.js";
+import { shouldDeadLetterAttempt } from "./worker.js";
 
 test("getAttemptStatus treats axios timeouts as timed out attempts", () => {
   assert.equal(getAttemptStatus(new AxiosError("timeout", "ECONNABORTED")), "TIMED_OUT");
@@ -52,4 +53,11 @@ test("calculateBackoffDelayMs supports capped exponential delays", () => {
     ),
     6000,
   );
+});
+
+test("shouldDeadLetterAttempt requires a final failed attempt", () => {
+  assert.equal(shouldDeadLetterAttempt("FAILED", false), true);
+  assert.equal(shouldDeadLetterAttempt("TIMED_OUT", false), true);
+  assert.equal(shouldDeadLetterAttempt("FAILED", true), false);
+  assert.equal(shouldDeadLetterAttempt("SUCCEEDED", false), false);
 });

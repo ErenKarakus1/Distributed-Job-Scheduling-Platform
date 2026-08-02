@@ -20,6 +20,10 @@ type RecordAttemptInput = {
   finishedAt: Date;
 };
 
+export function shouldDeadLetterAttempt(status: RecordAttemptInput["status"], retryable: boolean) {
+  return status !== "SUCCEEDED" && !retryable;
+}
+
 export function createWorkerRuntime(deps: WorkerRuntimeDependencies) {
   const { prisma, serviceInstanceId, responsePreviewLimit } = deps;
   const workerState = createWorkerState({ prisma, serviceInstanceId });
@@ -44,6 +48,7 @@ export function createWorkerRuntime(deps: WorkerRuntimeDependencies) {
       const attemptNumber = execution.attemptCount + 1;
       const retryable = input.status !== "SUCCEEDED" && attemptNumber < execution.job.maxAttempts;
       const nextAttemptAt = retryable ? new Date(input.finishedAt.getTime() + calculateBackoffDelayMs(execution.job, attemptNumber + 1)) : null;
+      const deadLetterReason = shouldDeadLetterAttempt(input.status, retryable) ? "MAX_ATTEMPTS_EXHAUSTED" : undefined;
 
       await tx.executionAttempt.create({
         data: {
@@ -74,6 +79,24 @@ export function createWorkerRuntime(deps: WorkerRuntimeDependencies) {
           finishedAt: input.status === "SUCCEEDED" || !retryable ? input.finishedAt : null,
         },
       });
+
+      if (deadLetterReason) {
+        await tx.deadLetterMessage.create({
+          data: {
+            executionId: execution.id,
+            reason: deadLetterReason,
+            sourceQueue: "execution.ready",
+            error: input.errorMessage,
+            payload: {
+              executionId: execution.id,
+              jobId: execution.jobId,
+              attemptNumber,
+              status: input.status,
+              httpStatusCode: input.httpStatusCode,
+            },
+          },
+        });
+      }
     });
   }
 
