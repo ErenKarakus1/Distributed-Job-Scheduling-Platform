@@ -296,6 +296,11 @@ textarea {
   gap: 14px;
 }
 
+.compact-metrics {
+  grid-template-columns: repeat(2, minmax(160px, 1fr));
+  margin-top: 14px;
+}
+
 .operation-bar {
   display: flex;
   flex-wrap: wrap;

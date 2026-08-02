@@ -159,11 +159,32 @@ model Execution {
   job      Job                @relation(fields: [jobId], references: [id], onDelete: Cascade)
   worker   Worker?            @relation(fields: [lockedByWorkerId], references: [id])
   attempts ExecutionAttempt[]
+  deadLetters DeadLetterMessage[]
 
   @@index([status, scheduledFor])
   @@index([nextAttemptAt])
   @@index([lockedByWorkerId])
   @@map("executions")
+}
+
+model DeadLetterMessage {
+  id          String    @id @default(uuid())
+  executionId String?
+  reason      String
+  payload     Json
+  sourceQueue String
+  error       String?
+  requeuedAt  DateTime?
+  discardedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  execution Execution? @relation(fields: [executionId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([executionId])
+  @@index([requeuedAt, discardedAt])
+  @@map("dead_letter_messages")
 }
 
 model ExecutionAttempt {

@@ -93,6 +93,28 @@ export function registerProxyRoutes(app: express.Express, deps: ProxyRouteDepend
     void forwardRequest(req, res, services.execution, "/workers");
   });
 
+  app.get("/api/dead-letter", requireAdminUser, (req, res) => {
+    void forwardRequest(req, res, services.execution, "/dead-letter");
+  });
+
+  app.post("/api/dead-letter/:id/requeue", requireAdminUser, (req, res) => {
+    const messageId = routeParam(req.params.id);
+    void forwardRequest(req, res, services.execution, `/dead-letter/${req.params.id}/requeue`, {
+      action: "dead_letter.requeue",
+      resourceType: "dead_letter_message",
+      resourceId: messageId,
+    });
+  });
+
+  app.delete("/api/dead-letter/:id", requireAdminUser, (req, res) => {
+    const messageId = routeParam(req.params.id);
+    void forwardRequest(req, res, services.execution, `/dead-letter/${req.params.id}`, {
+      action: "dead_letter.discard",
+      resourceType: "dead_letter_message",
+      resourceId: messageId,
+    });
+  });
+
   app.get("/api/metrics/overview", (req, res) => {
     void forwardRequest(req, res, services.execution, "/metrics/overview");
   });

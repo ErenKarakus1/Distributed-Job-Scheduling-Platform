@@ -5,7 +5,23 @@ import { AuthStrip, type DashboardView, Sidebar, Toolbar } from "./layouts/dashb
 import { AuthPage } from "./pages/auth-page.js";
 import { DashboardViews } from "./pages/dashboard-views.js";
 import { AUTH_TOKEN_STORAGE_KEY, createDefaultAuditFilters, createDefaultJobForm, createEmptyAuthForm, createJobFormFromRow, DEFAULT_PAGE_STATE } from "./state/dashboard-state.js";
-import type { ApiKeyRow, AuditEvent, AuthResponse, AuthUser, CreatedApiKey, ExecutionRow, JobRow, MetricsOverview, NewJobFormState, PageResponse, ServiceHealthMap, WorkerRow } from "./types.js";
+import type {
+  ApiKeyRow,
+  AuditEvent,
+  AuthResponse,
+  AuthUser,
+  CreatedApiKey,
+  DeadLetterResponse,
+  DeadLetterRow,
+  DeadLetterSummary,
+  ExecutionRow,
+  JobRow,
+  MetricsOverview,
+  NewJobFormState,
+  PageResponse,
+  ServiceHealthMap,
+  WorkerRow,
+} from "./types.js";
 
 const defaultApiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000";
 
@@ -22,9 +38,12 @@ export function App() {
   const [jobPage, setJobPage] = React.useState(DEFAULT_PAGE_STATE);
   const [executionPage, setExecutionPage] = React.useState(DEFAULT_PAGE_STATE);
   const [workerPage, setWorkerPage] = React.useState(DEFAULT_PAGE_STATE);
+  const [deadLetterPage, setDeadLetterPage] = React.useState(DEFAULT_PAGE_STATE);
   const [jobStatusFilter, setJobStatusFilter] = React.useState("");
   const [executionStatusFilter, setExecutionStatusFilter] = React.useState("");
   const [workers, setWorkers] = React.useState<WorkerRow[]>([]);
+  const [deadLetters, setDeadLetters] = React.useState<DeadLetterRow[]>([]);
+  const [deadLetterSummary, setDeadLetterSummary] = React.useState<DeadLetterSummary>({ active: 0 });
   const [users, setUsers] = React.useState<AuthUser[]>([]);
   const [apiKeys, setApiKeys] = React.useState<ApiKeyRow[]>([]);
   const [apiKeyName, setApiKeyName] = React.useState("");
@@ -48,7 +67,7 @@ export function App() {
   }, [authToken, apiBaseUrl]);
 
   React.useEffect(() => {
-    if (authUser?.role !== "ADMIN" && (activeView === "users" || activeView === "apiKeys")) {
+    if (authUser?.role !== "ADMIN" && (activeView === "users" || activeView === "apiKeys" || activeView === "deadLetter")) {
       setActiveView("overview");
       setMessage("Admin role is required");
     }
@@ -59,7 +78,7 @@ export function App() {
       return;
     }
 
-    if (authUser.role !== "ADMIN" && (activeView === "users" || activeView === "apiKeys")) {
+    if (authUser.role !== "ADMIN" && (activeView === "users" || activeView === "apiKeys" || activeView === "deadLetter")) {
       return;
     }
 
@@ -111,6 +130,16 @@ export function App() {
     setWorkers(body.data);
     setWorkerPage(body.page);
     setMessage(`Loaded ${body.data.length} worker(s)`);
+  }
+
+  async function refreshDeadLetters(page = deadLetterPage) {
+    setMessage("Loading dead-letter messages");
+    const params = createPageParams(page);
+    const body = await request<DeadLetterResponse>(`/api/dead-letter?${params}`);
+    setDeadLetters(body.data);
+    setDeadLetterSummary(body.summary);
+    setDeadLetterPage(body.page);
+    setMessage(`Loaded ${body.data.length} dead-letter message(s)`);
   }
 
   async function refreshUsers() {
@@ -169,6 +198,7 @@ export function App() {
       if (activeView === "jobs") await refreshJobs();
       if (activeView === "executions") await refreshExecutions();
       if (activeView === "workers") await refreshWorkers();
+      if (activeView === "deadLetter") await refreshDeadLetters();
       if (activeView === "users") await refreshUsers();
       if (activeView === "apiKeys") await refreshApiKeys();
       if (activeView === "audit") await refreshAuditEvents();
@@ -305,6 +335,22 @@ export function App() {
     }
   }
 
+  async function runDeadLetterAction(messageId: string, action: "requeue" | "discard") {
+    try {
+      setMessage(`${action} dead-letter message`);
+      if (action === "requeue") {
+        await request(`/api/dead-letter/${messageId}/requeue`, { method: "POST" });
+        await request("/api/schedule/run", { method: "POST" });
+      } else {
+        await request(`/api/dead-letter/${messageId}`, { method: "DELETE" });
+      }
+      await refreshDeadLetters();
+      setMessage(`${action} dead-letter message complete`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : `${action} dead-letter message failed`);
+    }
+  }
+
   function signOut() {
     localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
     setAuthToken("");
@@ -361,6 +407,9 @@ export function App() {
           auditEvents={auditEvents}
           auditFilters={auditFilters}
           createdApiKey={createdApiKey}
+          deadLetterPage={deadLetterPage}
+          deadLetterSummary={deadLetterSummary}
+          deadLetters={deadLetters}
           editingJobId={editingJobId}
           executionPage={executionPage}
           executionStatusFilter={executionStatusFilter}
@@ -379,6 +428,8 @@ export function App() {
           onCreateApiKey={(event) => void createApiKey(event)}
           onCreateJob={(event) => void createJob(event)}
           onCancelJobEdit={cancelJobEdit}
+          onDeadLetterAction={runDeadLetterAction}
+          onDeadLetterPageChange={setDeadLetterPage}
           onExecutionAction={runExecutionAction}
           onExecutionPageChange={setExecutionPage}
           onExecutionStatusFilterChange={setExecutionStatusFilter}
@@ -390,6 +441,7 @@ export function App() {
           onRefreshExecutions={(page) => void refreshExecutions(page)}
           onRefreshJobs={(page) => void refreshJobs(page)}
           onRefreshWorkers={(page) => void refreshWorkers(page)}
+          onRefreshDeadLetters={(page) => void refreshDeadLetters(page)}
           onRecoverStalled={() => void recoverStalledExecutions()}
           onRunScheduler={() => void runScheduler()}
           onUserRoleChange={updateUserRole}

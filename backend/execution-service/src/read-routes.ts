@@ -94,6 +94,49 @@ export function registerExecutionReadRoutes(app: express.Express, deps: ReadRout
     }
   });
 
+  app.get("/dead-letter", async (req, res, next) => {
+    try {
+      const pagination = paginationSchema.parse(req.query);
+      const activeWhere = { requeuedAt: null, discardedAt: null };
+
+      const [messages, total, oldestActive] = await Promise.all([
+        prisma.deadLetterMessage.findMany({
+          where: activeWhere,
+          include: {
+            execution: {
+              select: {
+                id: true,
+                jobId: true,
+                status: true,
+                attemptCount: true,
+              },
+            },
+          },
+          orderBy: { createdAt: "desc" },
+          take: pagination.limit,
+          skip: pagination.offset,
+        }),
+        prisma.deadLetterMessage.count({ where: activeWhere }),
+        prisma.deadLetterMessage.findFirst({
+          where: activeWhere,
+          orderBy: { createdAt: "asc" },
+          select: { createdAt: true },
+        }),
+      ]);
+
+      res.json({
+        data: messages,
+        summary: {
+          active: total,
+          oldestCreatedAt: oldestActive?.createdAt ?? null,
+        },
+        page: { ...pagination, total },
+      });
+    } catch (error) {
+      if (!sendValidationError(res, error)) next(error);
+    }
+  });
+
   app.get("/metrics/overview", async (_req, res, next) => {
     try {
       const [
@@ -106,6 +149,7 @@ export function registerExecutionReadRoutes(app: express.Express, deps: ReadRout
         failedExecutions,
         succeededExecutions,
         activeWorkers,
+        deadLetters,
       ] = await Promise.all([
         prisma.job.count({ where: { status: { not: "DELETED" } } }),
         prisma.job.count({ where: { status: "ACTIVE" } }),
@@ -116,6 +160,7 @@ export function registerExecutionReadRoutes(app: express.Express, deps: ReadRout
         prisma.execution.count({ where: { status: "FAILED" } }),
         prisma.execution.count({ where: { status: "SUCCEEDED" } }),
         prisma.worker.count({ where: { status: { in: ["IDLE", "BUSY"] } } }),
+        prisma.deadLetterMessage.count({ where: { requeuedAt: null, discardedAt: null } }),
       ]);
 
       res.json({
@@ -133,6 +178,9 @@ export function registerExecutionReadRoutes(app: express.Express, deps: ReadRout
         },
         workers: {
           active: activeWorkers,
+        },
+        deadLetters: {
+          active: deadLetters,
         },
       });
     } catch (error) {

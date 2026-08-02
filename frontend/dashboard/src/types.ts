@@ -111,6 +111,36 @@ export type MetricsOverview = {
   workers?: {
     active?: number;
   };
+  deadLetters?: {
+    active?: number;
+  };
+};
+
+export type DeadLetterRow = {
+  id: string;
+  executionId?: string | null;
+  reason: string;
+  payload: unknown;
+  sourceQueue: string;
+  error?: string | null;
+  requeuedAt?: string | null;
+  discardedAt?: string | null;
+  createdAt: string;
+  execution?: {
+    id: string;
+    jobId: string;
+    status: string;
+    attemptCount: number;
+  } | null;
+};
+
+export type DeadLetterSummary = {
+  active: number;
+  oldestCreatedAt?: string | null;
+};
+
+export type DeadLetterResponse = PageResponse<DeadLetterRow> & {
+  summary: DeadLetterSummary;
 };
 
 export type ServiceHealthEntry = {

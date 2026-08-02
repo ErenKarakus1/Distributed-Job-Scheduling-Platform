@@ -4,6 +4,7 @@ export function OverviewPanel(props: { metrics: MetricsOverview; onRecoverStalle
   const jobs = props.metrics.jobs ?? {};
   const executions = props.metrics.executions ?? {};
   const workers = props.metrics.workers ?? {};
+  const deadLetters = props.metrics.deadLetters ?? {};
 
   const cards: Array<[string, unknown]> = [
     ["Active jobs", jobs.active],
@@ -14,6 +15,7 @@ export function OverviewPanel(props: { metrics: MetricsOverview; onRecoverStalle
     ["Failed", executions.failed],
     ["Succeeded", executions.succeeded],
     ["Active workers", workers.active],
+    ["Dead letters", deadLetters.active],
   ];
 
   return (

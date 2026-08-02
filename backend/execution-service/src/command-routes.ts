@@ -131,6 +131,7 @@ export function registerExecutionCommandRoutes(app: express.Express, deps: Comma
         const nextAttemptAt = retryable
           ? new Date(finishedAt.getTime() + calculateBackoffDelayMs(execution.job, attemptNumber + 1))
           : null;
+        const deadLetterReason = !succeeded && !retryable ? "MAX_ATTEMPTS_EXHAUSTED" : undefined;
 
         const updatedExecution = await tx.execution.update({
           where: { id },
@@ -143,6 +144,24 @@ export function registerExecutionCommandRoutes(app: express.Express, deps: Comma
           },
           include: { job: true, attempts: true },
         });
+
+        if (deadLetterReason) {
+          await tx.deadLetterMessage.create({
+            data: {
+              executionId: execution.id,
+              reason: deadLetterReason,
+              sourceQueue: "execution.ready",
+              error: data.errorMessage,
+              payload: {
+                executionId: execution.id,
+                jobId: execution.jobId,
+                attemptNumber,
+                status: data.status,
+                httpStatusCode: data.httpStatusCode,
+              },
+            },
+          });
+        }
 
         return { execution: updatedExecution, attempt };
       });
@@ -238,6 +257,97 @@ export function registerExecutionCommandRoutes(app: express.Express, deps: Comma
         return;
       }
 
+      if (!sendValidationError(res, error)) next(error);
+    }
+  });
+
+  app.post("/dead-letter/:id/requeue", async (req, res, next) => {
+    try {
+      const id = parseId(req.params.id);
+
+      const result = await prisma.$transaction(async (tx) => {
+        const message = await tx.deadLetterMessage.findUnique({
+          where: { id },
+        });
+
+        if (!message) {
+          throw new ExecutionNotFoundError();
+        }
+
+        if (message.discardedAt) {
+          throw new Error("Dead-letter message was already discarded");
+        }
+
+        if (message.requeuedAt) {
+          throw new Error("Dead-letter message was already requeued");
+        }
+
+        if (message.executionId) {
+          await tx.execution.update({
+            where: { id: message.executionId },
+            data: {
+              status: "PENDING",
+              nextAttemptAt: new Date(),
+              lockedByWorkerId: null,
+              lastHeartbeatAt: null,
+              startedAt: null,
+              finishedAt: null,
+            },
+          });
+        }
+
+        return tx.deadLetterMessage.update({
+          where: { id },
+          data: { requeuedAt: new Date() },
+        });
+      });
+
+      res.json(result);
+    } catch (error) {
+      if (error instanceof ExecutionNotFoundError) {
+        res.status(404).json({ error: "Dead-letter message not found" });
+        return;
+      }
+
+      if (error instanceof Error && error.message.startsWith("Dead-letter message was already")) {
+        res.status(409).json({ error: error.message });
+        return;
+      }
+
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+        res.status(404).json({ error: "Related execution not found" });
+        return;
+      }
+
+      if (!sendValidationError(res, error)) next(error);
+    }
+  });
+
+  app.delete("/dead-letter/:id", async (req, res, next) => {
+    try {
+      const id = parseId(req.params.id);
+
+      const message = await prisma.deadLetterMessage.findUnique({
+        where: { id },
+      });
+
+      if (!message) {
+        res.status(404).json({ error: "Dead-letter message not found" });
+        return;
+      }
+
+      if (message.requeuedAt) {
+        res.status(409).json({ error: "Dead-letter message was already requeued" });
+        return;
+      }
+
+      const discarded = await prisma.deadLetterMessage.update({
+        where: { id },
+        data: { discardedAt: new Date() },
+      });
+
+      res.json(discarded);
+    } catch (error) {
       if (!sendValidationError(res, error)) next(error);
     }
   });

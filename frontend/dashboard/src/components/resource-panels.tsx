@@ -1,4 +1,4 @@
-import type { ApiKeyRow, AuditEvent, AuthUser, CreatedApiKey, ServiceHealthMap, WorkerRow } from "../types.js";
+import type { ApiKeyRow, AuditEvent, AuthUser, CreatedApiKey, DeadLetterRow, DeadLetterSummary, ServiceHealthMap, WorkerRow } from "../types.js";
 
 export function WorkerPanel(props: { rows: WorkerRow[] }) {
   return (
@@ -32,6 +32,63 @@ export function WorkerPanel(props: { rows: WorkerRow[] }) {
                   </tr>
                 );
               })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+export function DeadLetterPanel(props: { rows: DeadLetterRow[]; summary: DeadLetterSummary; onDiscard: (messageId: string) => void; onRequeue: (messageId: string) => void }) {
+  return (
+    <section className="panel">
+      <h2>Dead Letter Queue</h2>
+      <div className="metric-grid compact-metrics">
+        <div className="metric-card">
+          <span>Active messages</span>
+          <strong>{props.summary.active ?? props.rows.length}</strong>
+        </div>
+        <div className="metric-card">
+          <span>Oldest message</span>
+          <strong>{props.summary.oldestCreatedAt ?? "-"}</strong>
+        </div>
+      </div>
+      {props.rows.length === 0 ? (
+        <p className="empty-state">No dead-letter messages loaded</p>
+      ) : (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Created</th>
+                <th>Reason</th>
+                <th>Execution</th>
+                <th>Job</th>
+                <th>Queue</th>
+                <th>Error</th>
+                <th>Payload</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {props.rows.map((message) => (
+                <tr key={message.id}>
+                  <td>{message.createdAt}</td>
+                  <td>{message.reason}</td>
+                  <td>{message.executionId ?? "-"}</td>
+                  <td>{message.execution?.jobId ?? "-"}</td>
+                  <td>{message.sourceQueue}</td>
+                  <td>{message.error ?? "-"}</td>
+                  <td className="metadata-cell">{JSON.stringify(message.payload)}</td>
+                  <td>
+                    <div className="row-actions">
+                      <button onClick={() => props.onRequeue(message.id)}>Requeue</button>
+                      <button onClick={() => props.onDiscard(message.id)}>Discard</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

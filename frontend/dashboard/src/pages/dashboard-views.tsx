@@ -1,7 +1,22 @@
-import { ApiKeyPanel, AuditPanel, DataPanel, FilterBar, HealthPanel, OverviewPanel, Pager, UserPanel, WorkerPanel } from "../components/index.js";
+import { ApiKeyPanel, AuditPanel, DataPanel, DeadLetterPanel, FilterBar, HealthPanel, OverviewPanel, Pager, UserPanel, WorkerPanel } from "../components/index.js";
 import { ApiKeyCreateForm, AuditFilterBar, JobCreateForm } from "../forms.js";
 import type { DashboardView } from "../layouts/dashboard-shell.js";
-import type { ApiKeyRow, AuditEvent, AuditFilters, AuthUser, CreatedApiKey, ExecutionRow, JobRow, MetricsOverview, NewJobFormState, PageState, ServiceHealthMap, WorkerRow } from "../types.js";
+import type {
+  ApiKeyRow,
+  AuditEvent,
+  AuditFilters,
+  AuthUser,
+  CreatedApiKey,
+  DeadLetterRow,
+  DeadLetterSummary,
+  ExecutionRow,
+  JobRow,
+  MetricsOverview,
+  NewJobFormState,
+  PageState,
+  ServiceHealthMap,
+  WorkerRow,
+} from "../types.js";
 
 type DashboardViewsProps = {
   activeView: DashboardView;
@@ -10,6 +25,9 @@ type DashboardViewsProps = {
   apiKeyName: string;
   apiKeys: ApiKeyRow[];
   createdApiKey: CreatedApiKey | null;
+  deadLetterPage: PageState;
+  deadLetterSummary: DeadLetterSummary;
+  deadLetters: DeadLetterRow[];
   executionPage: PageState;
   executionStatusFilter: string;
   executions: ExecutionRow[];
@@ -27,6 +45,8 @@ type DashboardViewsProps = {
   onApiKeyNameChange: (name: string) => void;
   onCreateJob: (event: React.FormEvent<HTMLFormElement>) => void;
   onCreateApiKey: (event: React.FormEvent<HTMLFormElement>) => void;
+  onDeadLetterAction: (messageId: string, action: "requeue" | "discard") => void;
+  onDeadLetterPageChange: (page: PageState) => void;
   onExecutionAction: (executionId: string, action: "cancel" | "retry") => void;
   onExecutionPageChange: (page: PageState) => void;
   onExecutionStatusFilterChange: (status: string) => void;
@@ -37,6 +57,7 @@ type DashboardViewsProps = {
   onJobStatusFilterChange: (status: string) => void;
   onRefreshAuditEvents: () => void;
   onRefreshExecutions: (page?: PageState) => void;
+  onRefreshDeadLetters: (page?: PageState) => void;
   onRefreshJobs: (page?: PageState) => void;
   onRefreshWorkers: (page?: PageState) => void;
   onRecoverStalled: () => void;
@@ -97,6 +118,20 @@ export function DashboardViews(props: DashboardViewsProps) {
       <>
         <WorkerPanel rows={props.workers} />
         <Pager page={props.workerPage} onChange={props.onWorkerPageChange} onApply={props.onRefreshWorkers} />
+      </>
+    );
+  }
+
+  if (props.activeView === "deadLetter") {
+    return (
+      <>
+        <DeadLetterPanel
+          rows={props.deadLetters}
+          summary={props.deadLetterSummary}
+          onDiscard={(messageId) => props.onDeadLetterAction(messageId, "discard")}
+          onRequeue={(messageId) => props.onDeadLetterAction(messageId, "requeue")}
+        />
+        <Pager page={props.deadLetterPage} onChange={props.onDeadLetterPageChange} onApply={props.onRefreshDeadLetters} />
       </>
     );
   }

@@ -120,6 +120,22 @@ CREATE TABLE "executions" (
 );
 
 -- CreateTable
+CREATE TABLE "dead_letter_messages" (
+    "id" TEXT NOT NULL,
+    "executionId" TEXT,
+    "reason" TEXT NOT NULL,
+    "payload" JSONB NOT NULL,
+    "sourceQueue" TEXT NOT NULL,
+    "error" TEXT,
+    "requeuedAt" TIMESTAMP(3),
+    "discardedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "dead_letter_messages_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "execution_attempts" (
     "id" TEXT NOT NULL,
     "executionId" TEXT NOT NULL,
@@ -187,6 +203,15 @@ CREATE INDEX "executions_nextAttemptAt_idx" ON "executions"("nextAttemptAt");
 CREATE INDEX "executions_lockedByWorkerId_idx" ON "executions"("lockedByWorkerId");
 
 -- CreateIndex
+CREATE INDEX "dead_letter_messages_createdAt_idx" ON "dead_letter_messages"("createdAt");
+
+-- CreateIndex
+CREATE INDEX "dead_letter_messages_executionId_idx" ON "dead_letter_messages"("executionId");
+
+-- CreateIndex
+CREATE INDEX "dead_letter_messages_requeuedAt_discardedAt_idx" ON "dead_letter_messages"("requeuedAt", "discardedAt");
+
+-- CreateIndex
 CREATE INDEX "execution_attempts_workerId_idx" ON "execution_attempts"("workerId");
 
 -- CreateIndex
@@ -206,6 +231,9 @@ ALTER TABLE "executions" ADD CONSTRAINT "executions_jobId_fkey" FOREIGN KEY ("jo
 
 -- AddForeignKey
 ALTER TABLE "executions" ADD CONSTRAINT "executions_lockedByWorkerId_fkey" FOREIGN KEY ("lockedByWorkerId") REFERENCES "workers"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "dead_letter_messages" ADD CONSTRAINT "dead_letter_messages_executionId_fkey" FOREIGN KEY ("executionId") REFERENCES "executions"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "execution_attempts" ADD CONSTRAINT "execution_attempts_executionId_fkey" FOREIGN KEY ("executionId") REFERENCES "executions"("id") ON DELETE CASCADE ON UPDATE CASCADE;

@@ -63,6 +63,13 @@ async function main() {
 
   const authHeaders = { authorization: `Bearer ${login.token}` };
 
+  const apiKey = await request("/internal/api-keys", {
+    method: "POST",
+    headers: authHeaders,
+    body: JSON.stringify({ name: `Smoke key ${new Date().toISOString()}` }),
+  });
+  assert(apiKey?.apiKey, "Expected created API key");
+
   const runAt = new Date(Date.now() + 60_000).toISOString();
 
   const job = await request("/api/jobs", {
@@ -107,6 +114,11 @@ async function main() {
     headers: authHeaders,
   });
   assert(metrics, "Expected metrics overview");
+
+  const deadLetters = await request("/api/dead-letter?limit=10", {
+    headers: authHeaders,
+  });
+  assert(Array.isArray(deadLetters?.data), "Expected dead-letter list");
 
   const auditEvents = await request("/api/audit-events?limit=10", {
     headers: authHeaders,

@@ -34,6 +34,21 @@ function parseExecutionMessage(message: amqp.Message) {
   return parseExecutionMessageContent(message.content.toString());
 }
 
+async function recordMalformedDeadLetter(message: amqp.Message, error: unknown) {
+  const rawPayload = message.content.toString();
+
+  await prisma.deadLetterMessage.create({
+    data: {
+      reason: "MALFORMED_MESSAGE",
+      sourceQueue: readyQueueName,
+      error: error instanceof Error ? error.message : "Malformed execution message",
+      payload: {
+        rawPayload,
+      },
+    },
+  });
+}
+
 async function startConsumer() {
   await workerRuntime.registerWorker();
 
@@ -63,6 +78,9 @@ async function startConsumer() {
     } catch (error) {
       console.error("worker failed to process execution message", error);
       const shouldRequeue = !(error instanceof MalformedExecutionMessageError);
+      if (!shouldRequeue) {
+        await recordMalformedDeadLetter(message, error);
+      }
       channel.nack(message, false, shouldRequeue);
     }
   });

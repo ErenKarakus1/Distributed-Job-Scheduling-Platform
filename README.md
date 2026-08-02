@@ -11,9 +11,9 @@
 ![Docker](https://img.shields.io/badge/Docker-Compose-blue.svg?logo=docker&logoColor=white)
 ![CI](https://github.com/ErenKarakus1/Distributed-Job-Scheduling-Platform/actions/workflows/ci.yml/badge.svg)
 
-A microservices-based distributed HTTP job scheduling platform for creating one-time and recurring jobs, executing them across workers, retrying failures, recovering stalled executions, and monitoring execution history through an API and web dashboard.
+A microservices-based distributed HTTP job scheduling platform for creating one-time and recurring jobs, executing them across workers, retrying failures, recovering stalled executions, tracking dead-lettered work, and monitoring execution history through an API and web dashboard.
 
-Developers can create HTTP jobs, schedule future or recurring runs, inspect attempts and response metadata, manually retry failed executions, recover stalled work, manage dashboard users, authenticate with JWTs or API keys, and run the full platform locally with Docker Compose.
+Developers can create HTTP jobs, schedule future or recurring runs, inspect attempts and response metadata, manually retry failed executions, recover stalled work, inspect and requeue dead-letter messages, manage dashboard users, authenticate with JWTs or API keys, and run the full platform locally with Docker Compose.
 
 ## Table of Contents
 
@@ -21,6 +21,7 @@ Developers can create HTTP jobs, schedule future or recurring runs, inspect atte
 - [Features](#features)
 - [How It Works](#how-it-works)
 - [Retry and Recovery](#retry-and-recovery)
+- [Dead Letter Queue](#dead-letter-queue)
 - [Authentication and Authorization](#authentication-and-authorization)
 - [Architecture](#architecture)
 - [Project Structure](#project-structure)
@@ -35,6 +36,7 @@ Developers can create HTTP jobs, schedule future or recurring runs, inspect atte
 - [Continuous Integration](#continuous-integration)
 - [Testing Retries](#testing-retries)
 - [Testing Stalled Recovery](#testing-stalled-recovery)
+- [Testing Dead Letter Messages](#testing-dead-letter-messages)
 - [Design Decisions](#design-decisions)
 - [Known Limitations](#known-limitations)
 - [Security Notes](#security-notes)
@@ -82,6 +84,8 @@ Developers can create HTTP jobs, schedule future or recurring runs, inspect atte
 - Retry delay caps
 - Manual execution retry
 - Stalled execution heartbeat recovery
+- Dead-letter records for exhausted executions and malformed queue messages
+- Admin dead-letter dashboard with requeue and discard actions
 - Worker registry and worker health reporting
 - Execution history and pagination
 - Dashboard metrics overview
@@ -93,7 +97,7 @@ Developers can create HTTP jobs, schedule future or recurring runs, inspect atte
 - Redis-backed API rate limiting
 - PostgreSQL persistence with Prisma
 - Squashed initial Prisma migration
-- React dashboard for jobs, executions, workers, metrics, and audit events
+- React dashboard for jobs, executions, workers, dead letters, metrics, health, and audit events
 - Dockerized local platform stack
 - Docker smoke test
 - GitHub Actions CI
@@ -132,6 +136,20 @@ The worker records failed, timed-out, and successful attempts. The execution ser
 
 Stalled recovery uses worker heartbeats. If an execution is `RUNNING` but its heartbeat is older than the configured stalled threshold, recovery can mark it for retry or fail it when retry attempts are exhausted.
 
+## Dead Letter Queue
+
+Terminal failed executions are written to a PostgreSQL-backed dead-letter table after their configured retry attempts are exhausted. Malformed RabbitMQ execution messages are also recorded before being rejected into RabbitMQ's dead-letter queue.
+
+The admin dashboard includes a Dead Letter view for:
+
+- active dead-letter message count
+- oldest active dead-letter timestamp
+- reason, source queue, linked execution, linked job, error, and payload preview
+- requeueing a linked execution back to `PENDING`
+- discarding a dead-letter message from the active queue
+
+The dashboard uses PostgreSQL for dead-letter inspection because RabbitMQ queues are not designed to be a long-term queryable audit store.
+
 ## Authentication and Authorization
 
 The API gateway supports two authentication methods for `/api/*` routes.
@@ -142,7 +160,7 @@ Dashboard users authenticate with email and password. Login returns a JWT that t
 
 JWT roles:
 
-- `ADMIN` - can read and mutate jobs, executions, scheduling, recovery, users, and API keys
+- `ADMIN` - can read and mutate jobs, executions, scheduling, recovery, dead letters, users, and API keys
 - `VIEWER` - can read dashboard data
 
 ### API Keys
@@ -176,10 +194,13 @@ flowchart LR
 
     Scheduler -->|Publish due executions| RabbitMQ[(RabbitMQ)]
     RabbitMQ -->|execution.ready| Workers
+    RabbitMQ -->|malformed messages| DeadLetters[Dead Letter Records]
     Workers -->|HTTP request| Target[External HTTP Endpoint]
     Workers --> Executions
 
     Executions -->|Retry or recover| RabbitMQ
+    Executions -->|exhausted failures| DeadLetters
+    DeadLetters --> Postgres
 ```
 
 ## Project Structure
@@ -198,8 +219,8 @@ backend/
       validation.ts      Job schemas
   execution-service/
     src/
-      command-routes.ts  Execution state changes, attempts, retry, recovery
-      read-routes.ts     Executions, workers, and metrics
+      command-routes.ts  Execution state changes, attempts, retry, recovery, dead letters
+      read-routes.ts     Executions, workers, dead letters, and metrics
       recovery.ts        Stalled execution recovery rules
       retry.ts           Retry delay and backoff rules
   scheduler-service/
@@ -644,6 +665,9 @@ curl -X POST http://localhost:3000/api/schedule/run \
 ### Operations and Monitoring
 
 - `GET /api/workers`
+- `GET /api/dead-letter`
+- `POST /api/dead-letter/:id/requeue`
+- `DELETE /api/dead-letter/:id`
 - `GET /api/metrics/overview`
 - `GET /api/audit-events`
 - `POST /api/schedule/run`
@@ -724,6 +748,7 @@ The smoke test checks:
 - scheduler trigger endpoint
 - execution listing
 - stalled recovery endpoint
+- dead-letter listing
 - metrics overview
 - audit event listing
 
@@ -775,6 +800,18 @@ To test stalled recovery:
 5. Call `POST /api/recover/stalled` or wait for the recovery loop.
 6. Confirm that the execution is retried or failed based on remaining attempts.
 
+## Testing Dead Letter Messages
+
+To test dead-letter handling:
+
+1. Create a job that targets an endpoint returning a `500` response.
+2. Set `maxAttempts` to `1`.
+3. Run the scheduler or manually run the job.
+4. Open the Dead Letter dashboard view as an admin, or call `GET /api/dead-letter`.
+5. Confirm the failed execution appears with reason `MAX_ATTEMPTS_EXHAUSTED`.
+6. Use Requeue to move the linked execution back to `PENDING`, then run the scheduler again.
+7. Use Discard to remove a message from the active dead-letter list when no further action is needed.
+
 ## Design Decisions
 
 ### Microservices
@@ -783,11 +820,15 @@ The backend is split by responsibility: gateway, jobs, executions, scheduler, an
 
 ### PostgreSQL and Prisma
 
-Jobs, schedules, executions, attempts, workers, users, API keys, and audit events are relational and queryable. PostgreSQL with Prisma keeps those relationships explicit and provides a migration workflow.
+Jobs, schedules, executions, attempts, workers, dead-letter messages, users, API keys, and audit events are relational and queryable. PostgreSQL with Prisma keeps those relationships explicit and provides a migration workflow.
 
 ### RabbitMQ
 
 RabbitMQ handles runnable execution delivery to distributed workers. Workers can scale horizontally by adding more consumers to the same queue.
+
+### Dead Letters
+
+RabbitMQ is used for message delivery and rejection behavior, while PostgreSQL stores the dashboard-facing dead-letter records. That keeps failed work queryable, auditable, and actionable through the API without relying on RabbitMQ queue browsing as an application database.
 
 ### Redis
 
@@ -810,6 +851,7 @@ Retries are stored as part of execution state instead of being hidden inside wor
 - The dashboard uses production-build checks but does not yet include a frontend test suite.
 - There is no OpenAPI document yet.
 - Cron scheduling depends on the scheduler service polling interval.
+- Dead-letter requeue returns linked executions to `PENDING`; malformed messages without an execution link can only be discarded from the dashboard record.
 - RabbitMQ and PostgreSQL are exposed on localhost for local development convenience.
 
 ## Security Notes
@@ -835,7 +877,6 @@ Retries are stored as part of execution state instead of being hidden inside wor
 - Metrics export for Prometheus
 - Structured tracing across services
 - Webhook signing for outgoing HTTP jobs
-- Dead-letter queue dashboard view
 - Production deployment manifests
 
 ## License
