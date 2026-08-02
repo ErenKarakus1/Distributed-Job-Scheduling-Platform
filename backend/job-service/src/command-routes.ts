@@ -18,6 +18,17 @@ class JobPausedError extends Error {
   }
 }
 
+class JobDeletedError extends Error {
+  constructor() {
+    super("Deleted jobs cannot be changed");
+    this.name = "JobDeletedError";
+  }
+}
+
+export function canChangeJobStatus(currentStatus: string | undefined) {
+  return currentStatus !== "DELETED";
+}
+
 export function registerJobCommandRoutes(
   app: express.Express,
   deps: JobRouteDependencies,
@@ -72,6 +83,20 @@ export function registerJobCommandRoutes(
   app.post("/jobs/:id/pause", async (req, res, next) => {
     try {
       const id = parseId(req.params.id);
+
+      const existing = await prisma.job.findUnique({
+        where: { id },
+        select: { status: true },
+      });
+
+      if (!existing) {
+        throw new JobNotFoundError();
+      }
+
+      if (!canChangeJobStatus(existing.status)) {
+        throw new JobDeletedError();
+      }
+
       const job = await prisma.job.update({
         where: { id },
         data: { status: "PAUSED" },
@@ -80,6 +105,16 @@ export function registerJobCommandRoutes(
 
       res.json(job);
     } catch (error) {
+      if (error instanceof JobNotFoundError) {
+        res.status(404).json({ error: error.message });
+        return;
+      }
+
+      if (error instanceof JobDeletedError) {
+        res.status(409).json({ error: error.message });
+        return;
+      }
+
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === "P2025"
@@ -95,6 +130,20 @@ export function registerJobCommandRoutes(
   app.post("/jobs/:id/resume", async (req, res, next) => {
     try {
       const id = parseId(req.params.id);
+
+      const existing = await prisma.job.findUnique({
+        where: { id },
+        select: { status: true },
+      });
+
+      if (!existing) {
+        throw new JobNotFoundError();
+      }
+
+      if (!canChangeJobStatus(existing.status)) {
+        throw new JobDeletedError();
+      }
+
       const job = await prisma.job.update({
         where: { id },
         data: { status: "ACTIVE" },
@@ -103,6 +152,16 @@ export function registerJobCommandRoutes(
 
       res.json(job);
     } catch (error) {
+      if (error instanceof JobNotFoundError) {
+        res.status(404).json({ error: error.message });
+        return;
+      }
+
+      if (error instanceof JobDeletedError) {
+        res.status(409).json({ error: error.message });
+        return;
+      }
+
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === "P2025"
@@ -120,6 +179,19 @@ export function registerJobCommandRoutes(
       const id = parseId(req.params.id);
       const data = updateJobSchema.parse(req.body);
       const schedule = data.schedule;
+
+      const existing = await prisma.job.findUnique({
+        where: { id },
+        select: { status: true },
+      });
+
+      if (!existing) {
+        throw new JobNotFoundError();
+      }
+
+      if (!canChangeJobStatus(existing.status)) {
+        throw new JobDeletedError();
+      }
 
       const job = await prisma.job.update({
         where: { id },
@@ -159,6 +231,16 @@ export function registerJobCommandRoutes(
 
       res.json(job);
     } catch (error) {
+      if (error instanceof JobNotFoundError) {
+        res.status(404).json({ error: error.message });
+        return;
+      }
+
+      if (error instanceof JobDeletedError) {
+        res.status(409).json({ error: error.message });
+        return;
+      }
+
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === "P2025"

@@ -90,7 +90,7 @@ export function createWorkerRuntime(deps: WorkerRuntimeDependencies) {
         },
       });
 
-      await tx.execution.updateMany({
+      const updatedExecution = await tx.execution.updateMany({
         where: {
           id: input.executionId,
           status: "RUNNING",
@@ -112,6 +112,10 @@ export function createWorkerRuntime(deps: WorkerRuntimeDependencies) {
               : null,
         },
       });
+
+      if (updatedExecution.count === 0) {
+        return;
+      }
 
       if (deadLetterReason) {
         await tx.deadLetterMessage.create({

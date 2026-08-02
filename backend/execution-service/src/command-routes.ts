@@ -32,6 +32,19 @@ class ExecutionJobDeletedError extends Error {
   }
 }
 
+class DeadLetterMessageCannotBeRequeuedError extends Error {
+  constructor() {
+    super("Dead-letter message cannot be requeued because it is not linked to an execution");
+    this.name = "DeadLetterMessageCannotBeRequeuedError";
+  }
+}
+
+export function canRequeueDeadLetterMessage(
+  executionId: string | null | undefined,
+): executionId is string {
+  return Boolean(executionId);
+}
+
 export function registerExecutionCommandRoutes(
   app: express.Express,
   deps: CommandRouteDependencies,
@@ -349,32 +362,35 @@ export function registerExecutionCommandRoutes(
           throw new Error("Dead-letter message was already requeued");
         }
 
-        if (message.executionId) {
-          const execution = await tx.execution.findUnique({
-            where: { id: message.executionId },
-            include: { job: true },
-          });
-
-          if (!execution) {
-            throw new ExecutionNotFoundError();
-          }
-
-          if (execution.job.status === "DELETED") {
-            throw new ExecutionJobDeletedError();
-          }
-
-          await tx.execution.update({
-            where: { id: message.executionId },
-            data: {
-              status: "PENDING",
-              nextAttemptAt: new Date(),
-              lockedByWorkerId: null,
-              lastHeartbeatAt: null,
-              startedAt: null,
-              finishedAt: null,
-            },
-          });
+        if (!canRequeueDeadLetterMessage(message.executionId)) {
+          throw new DeadLetterMessageCannotBeRequeuedError();
         }
+
+        const executionId = message.executionId;
+        const execution = await tx.execution.findUnique({
+          where: { id: executionId },
+          include: { job: true },
+        });
+
+        if (!execution) {
+          throw new ExecutionNotFoundError();
+        }
+
+        if (execution.job.status === "DELETED") {
+          throw new ExecutionJobDeletedError();
+        }
+
+        await tx.execution.update({
+          where: { id: executionId },
+          data: {
+            status: "PENDING",
+            nextAttemptAt: new Date(),
+            lockedByWorkerId: null,
+            lastHeartbeatAt: null,
+            startedAt: null,
+            finishedAt: null,
+          },
+        });
 
         return tx.deadLetterMessage.update({
           where: { id },
@@ -398,6 +414,11 @@ export function registerExecutionCommandRoutes(
       }
 
       if (error instanceof ExecutionJobDeletedError) {
+        res.status(409).json({ error: error.message });
+        return;
+      }
+
+      if (error instanceof DeadLetterMessageCannotBeRequeuedError) {
         res.status(409).json({ error: error.message });
         return;
       }

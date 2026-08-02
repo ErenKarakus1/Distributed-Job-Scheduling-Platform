@@ -16,6 +16,17 @@ type ProxyRouteDependencies = {
   forwardRequest: ForwardRequest;
 };
 
+const allowedJobActions = new Set(["run", "pause", "resume"]);
+const allowedExecutionActions = new Set(["cancel", "retry"]);
+
+export function isAllowedJobAction(action: string | undefined) {
+  return Boolean(action && allowedJobActions.has(action));
+}
+
+export function isAllowedExecutionAction(action: string | undefined) {
+  return Boolean(action && allowedExecutionActions.has(action));
+}
+
 export function registerProxyRoutes(app: express.Express, deps: ProxyRouteDependencies) {
   const { forwardRequest, requireAdminUser, services } = deps;
 
@@ -56,6 +67,12 @@ export function registerProxyRoutes(app: express.Express, deps: ProxyRouteDepend
   app.post("/api/jobs/:id/:action", requireAdminUser, (req, res) => {
     const jobId = routeParam(req.params.id);
     const action = routeParam(req.params.action);
+
+    if (!isAllowedJobAction(action)) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+
     void forwardRequest(req, res, services.job, `/jobs/${req.params.id}/${req.params.action}`, {
       action: `job.${action}`,
       resourceType: "job",
@@ -82,6 +99,12 @@ export function registerProxyRoutes(app: express.Express, deps: ProxyRouteDepend
   app.post("/api/executions/:id/:action", requireAdminUser, (req, res) => {
     const executionId = routeParam(req.params.id);
     const action = routeParam(req.params.action);
+
+    if (!isAllowedExecutionAction(action)) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+
     void forwardRequest(req, res, services.execution, `/executions/${req.params.id}/${req.params.action}`, {
       action: `execution.${action}`,
       resourceType: "execution",
