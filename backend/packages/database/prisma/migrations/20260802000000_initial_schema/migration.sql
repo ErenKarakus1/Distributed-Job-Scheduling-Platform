@@ -42,7 +42,7 @@ CREATE TABLE "users" (
     "email" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "passwordHash" TEXT NOT NULL,
-    "role" "UserRole" NOT NULL DEFAULT 'ADMIN',
+    "role" "UserRole" NOT NULL DEFAULT 'VIEWER',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
