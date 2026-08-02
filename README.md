@@ -145,7 +145,7 @@ The admin dashboard includes a Dead Letter view for:
 - active dead-letter message count
 - oldest active dead-letter timestamp
 - reason, source queue, linked execution, linked job, error, and payload preview
-- requeueing a linked execution back to `PENDING` when the linked job still exists and is active
+- requeueing a linked execution back to `PENDING` when the linked job still exists and is not deleted
 - discarding a dead-letter message from the active queue
 
 The dashboard uses PostgreSQL for dead-letter inspection because RabbitMQ queues are not designed to be a long-term queryable audit store.
@@ -818,7 +818,8 @@ To test dead-letter handling:
 4. Open the Dead Letter dashboard view as an admin, or call `GET /api/dead-letter`.
 5. Confirm the failed execution appears with reason `MAX_ATTEMPTS_EXHAUSTED`.
 6. Use Requeue to move the linked execution back to `PENDING`, then run the scheduler again.
-7. Use Discard to remove a message from the active dead-letter list when no further action is needed.
+7. Publish a malformed message to `execution.ready` and confirm the dashboard only shows Discard for that row.
+8. Use Discard to remove a message from the active dead-letter list when no further action is needed.
 
 ## Design Decisions
 
