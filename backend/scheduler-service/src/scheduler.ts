@@ -2,16 +2,46 @@ import { PrismaClient } from "@prisma/client";
 import { nextCronRun } from "./cron.js";
 import type { SchedulerStats } from "./stats.js";
 
+const schedulerAdvisoryLockId = 4_219_001;
+
 type PublishExecution = (executionId: string) => Promise<void>;
 
 type SchedulerDependencies = {
   prisma: PrismaClient;
   batchSize: number;
   publishExecution: PublishExecution;
+  lockId?: number;
+  acquireLock?: () => Promise<boolean>;
+  releaseLock?: () => Promise<void>;
 };
 
 export function createScheduler(deps: SchedulerDependencies) {
-  const { prisma, batchSize, publishExecution } = deps;
+  const {
+    prisma,
+    batchSize,
+    publishExecution,
+    lockId = schedulerAdvisoryLockId,
+  } = deps;
+
+  async function acquireSchedulerLock() {
+    if (deps.acquireLock) {
+      return deps.acquireLock();
+    }
+
+    const rows = await prisma.$queryRaw<
+      Array<{ locked: boolean }>
+    >`select pg_try_advisory_lock(${lockId}) as locked`;
+    return rows[0]?.locked === true;
+  }
+
+  async function releaseSchedulerLock() {
+    if (deps.releaseLock) {
+      await deps.releaseLock();
+      return;
+    }
+
+    await prisma.$queryRaw`select pg_advisory_unlock(${lockId})`;
+  }
 
   async function queueExecution(executionId: string) {
     await publishExecution(executionId);
@@ -140,15 +170,39 @@ export function createScheduler(deps: SchedulerDependencies) {
   }
 
   async function runSchedulerOnce(now = new Date()): Promise<SchedulerStats> {
-    const [oneTimeQueued, recurringQueued, retriesQueued, pendingQueued] =
-      await Promise.all([
-        scheduleDueOneTimeJobs(now),
-        scheduleDueRecurringJobs(now),
-        scheduleDueRetries(now),
-        scheduleDuePendingExecutions(now),
-      ]);
+    const lockAcquired = await acquireSchedulerLock();
 
-    return { oneTimeQueued, recurringQueued, retriesQueued, pendingQueued };
+    if (!lockAcquired) {
+      return {
+        lockAcquired,
+        skipped: true,
+        oneTimeQueued: 0,
+        recurringQueued: 0,
+        retriesQueued: 0,
+        pendingQueued: 0,
+      };
+    }
+
+    try {
+      const [oneTimeQueued, recurringQueued, retriesQueued, pendingQueued] =
+        await Promise.all([
+          scheduleDueOneTimeJobs(now),
+          scheduleDueRecurringJobs(now),
+          scheduleDueRetries(now),
+          scheduleDuePendingExecutions(now),
+        ]);
+
+      return {
+        lockAcquired,
+        skipped: false,
+        oneTimeQueued,
+        recurringQueued,
+        retriesQueued,
+        pendingQueued,
+      };
+    } finally {
+      await releaseSchedulerLock();
+    }
   }
 
   return { runSchedulerOnce };

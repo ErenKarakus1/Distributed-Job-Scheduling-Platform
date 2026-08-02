@@ -109,7 +109,7 @@ Jobs are stored durably in PostgreSQL. A job can be either:
 - `ONE_TIME` - runs once at a configured `runAt` time
 - `RECURRING` - runs repeatedly from a cron expression and timezone
 
-The scheduler service scans for due jobs and creates execution records. Runnable executions are published to RabbitMQ through the `execution.ready` queue. The included Docker setup runs a single scheduler instance.
+The scheduler service scans for due jobs and creates execution records. Each scheduler run first acquires a PostgreSQL advisory lock so multiple scheduler instances do not create the same due executions at the same time. Runnable executions are published to RabbitMQ through the `execution.ready` queue.
 
 Worker instances consume queued execution messages, mark executions as running, send heartbeat updates while work is active, perform the configured HTTP request with Axios, and record the attempt result.
 
@@ -850,7 +850,6 @@ Retries are stored as part of execution state instead of being hidden inside wor
 - Service-to-service calls inside the Docker network are trusted by local Compose configuration.
 - There is no OpenAPI document yet.
 - Cron scheduling depends on the scheduler service polling interval.
-- Running multiple scheduler-service instances at the same time is not protected by a scheduler lease yet, so duplicate due-job execution creation is still possible in that topology.
 - Dead-letter requeue returns active linked executions to `PENDING`; malformed messages without an execution link, or messages linked to deleted jobs, can only be discarded from the dashboard record.
 - RabbitMQ and PostgreSQL are exposed on localhost for local development convenience.
 
@@ -871,7 +870,7 @@ Retries are stored as part of execution state instead of being hidden inside wor
 - OpenAPI specification
 - Frontend component and integration tests
 - Refresh-token flow with HttpOnly cookies
-- Scheduler lease or leader election for safe multi-scheduler deployments
+- Transactional outbox for stronger RabbitMQ publish consistency
 - Multi-tenant organizations
 - Per-job execution timeout controls in the dashboard
 - Worker autoscaling notes
