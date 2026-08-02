@@ -100,7 +100,7 @@ Developers can create HTTP jobs, schedule future or recurring runs, inspect atte
 - Dockerized local platform stack
 - Docker smoke test
 - GitHub Actions CI
-- Backend unit tests and TypeScript checks
+- Backend and dashboard unit tests with TypeScript checks
 
 ## How It Works
 
@@ -131,7 +131,7 @@ Supported backoff types:
 - `FIXED`
 - `EXPONENTIAL`
 
-The worker records failed, timed-out, and successful attempts. The execution service decides whether another attempt should be queued, delayed, or whether the execution should become terminal.
+The worker records failed, timed-out, and successful attempts. The execution service decides whether another attempt should be queued, delayed, or whether the execution should become terminal. Manual retries are available for failed or canceled executions while their linked job is still active.
 
 Stalled recovery uses worker heartbeats. If an execution is `RUNNING` but its heartbeat is older than the configured stalled threshold, recovery can mark it for retry or fail it when retry attempts are exhausted.
 
@@ -144,7 +144,7 @@ The admin dashboard includes a Dead Letter view for:
 - active dead-letter message count
 - oldest active dead-letter timestamp
 - reason, source queue, linked execution, linked job, error, and payload preview
-- requeueing a linked execution back to `PENDING`
+- requeueing a linked execution back to `PENDING` when the linked job still exists and is active
 - discarding a dead-letter message from the active queue
 
 The dashboard uses PostgreSQL for dead-letter inspection because RabbitMQ queues are not designed to be a long-term queryable audit store.
@@ -848,10 +848,9 @@ Retries are stored as part of execution state instead of being hidden inside wor
 - JWTs are stored by the dashboard in browser local storage. A production deployment could move refresh/session handling to HttpOnly cookies.
 - Rate limiting uses a fixed-window Redis counter.
 - Service-to-service calls inside the Docker network are trusted by local Compose configuration.
-- The dashboard uses production-build checks but does not yet include a frontend test suite.
 - There is no OpenAPI document yet.
 - Cron scheduling depends on the scheduler service polling interval.
-- Dead-letter requeue returns linked executions to `PENDING`; malformed messages without an execution link can only be discarded from the dashboard record.
+- Dead-letter requeue returns active linked executions to `PENDING`; malformed messages without an execution link, or messages linked to deleted jobs, can only be discarded from the dashboard record.
 - RabbitMQ and PostgreSQL are exposed on localhost for local development convenience.
 
 ## Security Notes
