@@ -1,10 +1,11 @@
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { nextCronRun } from "./cron.js";
 import type { SchedulerStats } from "./stats.js";
 
 const schedulerAdvisoryLockId = 4_219_001;
 
 type PublishExecution = (executionId: string) => Promise<void>;
+type SchedulerDb = PrismaClient | Prisma.TransactionClient;
 
 type SchedulerDependencies = {
   prisma: PrismaClient;
@@ -23,37 +24,34 @@ export function createScheduler(deps: SchedulerDependencies) {
     lockId = schedulerAdvisoryLockId,
   } = deps;
 
-  async function acquireSchedulerLock() {
+  async function acquireSchedulerLock(db: SchedulerDb) {
     if (deps.acquireLock) {
       return deps.acquireLock();
     }
 
-    const rows = await prisma.$queryRaw<
+    const rows = await db.$queryRaw<
       Array<{ locked: boolean }>
-    >`select pg_try_advisory_lock(${lockId}) as locked`;
+    >`select pg_try_advisory_xact_lock(${lockId}) as locked`;
     return rows[0]?.locked === true;
   }
 
   async function releaseSchedulerLock() {
     if (deps.releaseLock) {
       await deps.releaseLock();
-      return;
     }
-
-    await prisma.$queryRaw`select pg_advisory_unlock(${lockId})`;
   }
 
-  async function queueExecution(executionId: string) {
+  async function queueExecution(db: SchedulerDb, executionId: string) {
     await publishExecution(executionId);
 
-    await prisma.execution.update({
+    await db.execution.update({
       where: { id: executionId },
       data: { status: "QUEUED" },
     });
   }
 
-  async function scheduleDueOneTimeJobs(now: Date) {
-    const jobs = await prisma.job.findMany({
+  async function scheduleDueOneTimeJobs(db: SchedulerDb, now: Date) {
+    const jobs = await db.job.findMany({
       where: {
         type: "ONE_TIME",
         status: "ACTIVE",
@@ -65,7 +63,7 @@ export function createScheduler(deps: SchedulerDependencies) {
     });
 
     for (const job of jobs) {
-      const execution = await prisma.execution.create({
+      const execution = await db.execution.create({
         data: {
           jobId: job.id,
           status: "PENDING",
@@ -74,14 +72,14 @@ export function createScheduler(deps: SchedulerDependencies) {
         },
       });
 
-      await queueExecution(execution.id);
+      await queueExecution(db, execution.id);
     }
 
     return jobs.length;
   }
 
-  async function scheduleDueRecurringJobs(now: Date) {
-    const schedules = await prisma.jobSchedule.findMany({
+  async function scheduleDueRecurringJobs(db: SchedulerDb, now: Date) {
+    const schedules = await db.jobSchedule.findMany({
       where: {
         nextRunAt: { lte: now },
         job: { status: "ACTIVE", type: "RECURRING" },
@@ -92,49 +90,43 @@ export function createScheduler(deps: SchedulerDependencies) {
     });
 
     for (const schedule of schedules) {
-      const executionId = await prisma.$transaction(async (tx) => {
-        const lockedSchedule = await tx.jobSchedule.findUnique({
-          where: { id: schedule.id },
-        });
-
-        if (!lockedSchedule || lockedSchedule.nextRunAt > now) {
-          return undefined;
-        }
-
-        const execution = await tx.execution.create({
-          data: {
-            jobId: schedule.jobId,
-            status: "PENDING",
-            scheduledFor: lockedSchedule.nextRunAt,
-            nextAttemptAt: lockedSchedule.nextRunAt,
-          },
-        });
-
-        await tx.jobSchedule.update({
-          where: { id: schedule.id },
-          data: {
-            lastRunAt: lockedSchedule.nextRunAt,
-            nextRunAt: nextCronRun(
-              lockedSchedule.cronExpression,
-              lockedSchedule.timezone,
-              now,
-            ),
-          },
-        });
-
-        return execution.id;
+      const lockedSchedule = await db.jobSchedule.findUnique({
+        where: { id: schedule.id },
       });
 
-      if (executionId) {
-        await queueExecution(executionId);
+      if (!lockedSchedule || lockedSchedule.nextRunAt > now) {
+        continue;
       }
+
+      const execution = await db.execution.create({
+        data: {
+          jobId: schedule.jobId,
+          status: "PENDING",
+          scheduledFor: lockedSchedule.nextRunAt,
+          nextAttemptAt: lockedSchedule.nextRunAt,
+        },
+      });
+
+      await db.jobSchedule.update({
+        where: { id: schedule.id },
+        data: {
+          lastRunAt: lockedSchedule.nextRunAt,
+          nextRunAt: nextCronRun(
+            lockedSchedule.cronExpression,
+            lockedSchedule.timezone,
+            now,
+          ),
+        },
+      });
+
+      await queueExecution(db, execution.id);
     }
 
     return schedules.length;
   }
 
-  async function scheduleDueRetries(now: Date) {
-    const executions = await prisma.execution.findMany({
+  async function scheduleDueRetries(db: SchedulerDb, now: Date) {
+    const executions = await db.execution.findMany({
       where: {
         status: "RETRY_SCHEDULED",
         nextAttemptAt: { lte: now },
@@ -145,14 +137,14 @@ export function createScheduler(deps: SchedulerDependencies) {
     });
 
     for (const execution of executions) {
-      await queueExecution(execution.id);
+      await queueExecution(db, execution.id);
     }
 
     return executions.length;
   }
 
-  async function scheduleDuePendingExecutions(now: Date) {
-    const executions = await prisma.execution.findMany({
+  async function scheduleDuePendingExecutions(db: SchedulerDb, now: Date) {
+    const executions = await db.execution.findMany({
       where: {
         status: "PENDING",
         nextAttemptAt: { lte: now },
@@ -163,46 +155,48 @@ export function createScheduler(deps: SchedulerDependencies) {
     });
 
     for (const execution of executions) {
-      await queueExecution(execution.id);
+      await queueExecution(db, execution.id);
     }
 
     return executions.length;
   }
 
   async function runSchedulerOnce(now = new Date()): Promise<SchedulerStats> {
-    const lockAcquired = await acquireSchedulerLock();
+    return prisma.$transaction(async (tx) => {
+      const lockAcquired = await acquireSchedulerLock(tx);
 
-    if (!lockAcquired) {
-      return {
-        lockAcquired,
-        skipped: true,
-        oneTimeQueued: 0,
-        recurringQueued: 0,
-        retriesQueued: 0,
-        pendingQueued: 0,
-      };
-    }
+      if (!lockAcquired) {
+        return {
+          lockAcquired,
+          skipped: true,
+          oneTimeQueued: 0,
+          recurringQueued: 0,
+          retriesQueued: 0,
+          pendingQueued: 0,
+        };
+      }
 
-    try {
-      const [oneTimeQueued, recurringQueued, retriesQueued, pendingQueued] =
-        await Promise.all([
-          scheduleDueOneTimeJobs(now),
-          scheduleDueRecurringJobs(now),
-          scheduleDueRetries(now),
-          scheduleDuePendingExecutions(now),
-        ]);
+      try {
+        const [oneTimeQueued, recurringQueued, retriesQueued, pendingQueued] =
+          await Promise.all([
+            scheduleDueOneTimeJobs(tx, now),
+            scheduleDueRecurringJobs(tx, now),
+            scheduleDueRetries(tx, now),
+            scheduleDuePendingExecutions(tx, now),
+          ]);
 
-      return {
-        lockAcquired,
-        skipped: false,
-        oneTimeQueued,
-        recurringQueued,
-        retriesQueued,
-        pendingQueued,
-      };
-    } finally {
-      await releaseSchedulerLock();
-    }
+        return {
+          lockAcquired,
+          skipped: false,
+          oneTimeQueued,
+          recurringQueued,
+          retriesQueued,
+          pendingQueued,
+        };
+      } finally {
+        await releaseSchedulerLock();
+      }
+    });
   }
 
   return { runSchedulerOnce };

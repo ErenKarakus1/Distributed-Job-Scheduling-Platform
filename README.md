@@ -109,7 +109,7 @@ Jobs are stored durably in PostgreSQL. A job can be either:
 - `ONE_TIME` - runs once at a configured `runAt` time
 - `RECURRING` - runs repeatedly from a cron expression and timezone
 
-The scheduler service scans for due jobs and creates execution records. Scheduler instances coordinate with a PostgreSQL advisory lock so multiple schedulers do not create the same due executions at the same time. Runnable executions are published to RabbitMQ through the `execution.ready` queue.
+The scheduler service scans for due jobs and creates execution records. Scheduler instances coordinate with a PostgreSQL advisory lock so multiple schedulers do not create the same due executions at the same time. Scheduler instances that cannot acquire the lock skip that polling run and try again later. Runnable executions are published to RabbitMQ through the `execution.ready` queue.
 
 Worker instances consume queued execution messages, mark executions as running, send heartbeat updates while work is active, perform the configured HTTP request with Axios, and record the attempt result.
 
@@ -828,7 +828,9 @@ RabbitMQ handles runnable execution delivery to distributed workers. Workers can
 
 ### Scheduler Coordination
 
-Scheduler instances coordinate through a PostgreSQL session-level advisory lock. Only the instance holding the lock may scan due jobs and create scheduled executions. The lock is held through a dedicated PostgreSQL connection and is automatically released if that connection closes, allowing another scheduler instance to take over.
+Scheduler instances coordinate through a PostgreSQL transaction-level advisory lock. Before scanning due jobs, a scheduler tries to acquire the lock. Only the instance that acquires it may scan due jobs and create scheduled executions; other scheduler instances skip that polling cycle and try again on the next poll.
+
+PostgreSQL releases the transaction-level lock when the scheduler run transaction finishes. If the scheduler process or database connection fails, PostgreSQL also releases the lock as part of ending that transaction.
 
 The lock coordinates scheduler leadership only. It does not serialize worker execution, so RabbitMQ workers can continue processing jobs concurrently.
 

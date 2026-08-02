@@ -4,19 +4,14 @@ import { sendValidationError } from "./http.js";
 import type { SchedulerStats } from "./stats.js";
 import { scheduleRunSchema } from "./validation.js";
 
-type RunSchedulerOnceWithLock = (
-  now?: Date,
-) => Promise<
-  | { acquired: true; stats: SchedulerStats }
-  | { acquired: false; stats: undefined }
->;
+type RunSchedulerOnce = (now?: Date) => Promise<SchedulerStats>;
 
 type SchedulerRouteDependencies = {
-  runSchedulerOnceWithLock: RunSchedulerOnceWithLock;
+  runSchedulerOnce: RunSchedulerOnce;
 };
 
 export function registerSchedulerRoutes(app: express.Express, deps: SchedulerRouteDependencies) {
-  const { runSchedulerOnceWithLock } = deps;
+  const { runSchedulerOnce } = deps;
 
   app.get("/health", (_req, res) => {
     res.json({ service: "scheduler-service", status: "ok" });
@@ -25,14 +20,14 @@ export function registerSchedulerRoutes(app: express.Express, deps: SchedulerRou
   app.post("/schedule/run", async (req, res, next) => {
     try {
       const data = scheduleRunSchema.parse(req.body);
-      const result = await runSchedulerOnceWithLock(data.now ?? new Date());
+      const stats = await runSchedulerOnce(data.now ?? new Date());
 
-      if (!result.acquired) {
-        res.status(409).json({ error: "Scheduler lock is already held" });
+      if (stats.skipped) {
+        res.status(409).json({ error: "Scheduler run skipped because another scheduler holds the lock" });
         return;
       }
 
-      res.json(result.stats);
+      res.json(stats);
     } catch (error) {
       if (sendValidationError(res, error)) return;
 

@@ -5,8 +5,13 @@ import { createScheduler } from "./scheduler.js";
 
 test("runSchedulerOnce skips when another scheduler owns the advisory lock", async () => {
   let published = 0;
+  const prisma = {
+    $transaction: async (callback: (tx: PrismaClient) => Promise<unknown>) =>
+      callback({} as PrismaClient),
+  } as unknown as PrismaClient;
+
   const scheduler = createScheduler({
-    prisma: {} as PrismaClient,
+    prisma,
     batchSize: 10,
     publishExecution: async () => {
       published += 1;
