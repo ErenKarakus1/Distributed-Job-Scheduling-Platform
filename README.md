@@ -96,6 +96,7 @@ Developers can create HTTP jobs, schedule future or recurring runs, inspect atte
 - Admin and viewer roles
 - Admin bootstrap command for Docker and local setup
 - Redis-backed API rate limiting
+- Graceful shutdown handling for backend services and workers
 - PostgreSQL persistence with Prisma
 - Squashed initial Prisma migration
 - React dashboard for jobs, executions, workers, dead letters, metrics, health, and audit events
@@ -863,6 +864,10 @@ JWTs are used for dashboard sessions and role-aware admin access. API keys are u
 ### Retry and Recovery
 
 Retries are stored as part of execution state instead of being hidden inside worker memory. That makes retry behavior inspectable and recoverable after service restarts.
+
+### Graceful Shutdown
+
+Backend services handle shutdown signals by closing HTTP servers, disconnecting database and cache clients, and stopping worker consumers cleanly where applicable.
 
 ## Known Limitations
 
