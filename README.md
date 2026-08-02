@@ -819,7 +819,6 @@ Retries are stored as part of execution state instead of being hidden inside wor
 
 ## Possible Future Improvements
 
-- GitHub Actions continuous integration
 - OpenAPI specification
 - Frontend component and integration tests
 - Refresh-token flow with HttpOnly cookies
