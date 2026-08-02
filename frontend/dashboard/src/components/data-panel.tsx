@@ -2,6 +2,15 @@ import React from "react";
 import type { ExecutionAttempt, ExecutionRow, JobRow } from "../types.js";
 
 type DataPanelRow = JobRow | ExecutionRow;
+const terminalExecutionStatuses = new Set(["SUCCEEDED", "FAILED", "CANCELED"]);
+
+export function canCancelExecution(status: unknown) {
+  return !terminalExecutionStatuses.has(String(status));
+}
+
+export function canRetryExecution(status: unknown) {
+  return ["FAILED", "CANCELED"].includes(String(status));
+}
 
 export function DataPanel(props: {
   title: string;
@@ -39,7 +48,8 @@ export function DataPanel(props: {
                 const displayName = "name" in item ? item.name : execution.job?.name ?? execution.jobId ?? "";
                 const displayDate = item.createdAt ?? execution.startedAt ?? "";
                 const rowId = item.id ?? String(index);
-                const canRetryExecution = ["FAILED", "CANCELED"].includes(String(execution.status));
+                const showCancelExecution = canCancelExecution(execution.status);
+                const showRetryExecution = canRetryExecution(execution.status);
 
                 return (
                   <React.Fragment key={rowId}>
@@ -69,8 +79,8 @@ export function DataPanel(props: {
                             )}
                             {props.onExecutionAction && (
                               <>
-                                <button onClick={() => props.onExecutionAction?.(item.id, "cancel")}>Cancel</button>
-                                {canRetryExecution && <button onClick={() => props.onExecutionAction?.(item.id, "retry")}>Retry</button>}
+                                {showCancelExecution && <button onClick={() => props.onExecutionAction?.(item.id, "cancel")}>Cancel</button>}
+                                {showRetryExecution && <button onClick={() => props.onExecutionAction?.(item.id, "retry")}>Retry</button>}
                               </>
                             )}
                           </div>
