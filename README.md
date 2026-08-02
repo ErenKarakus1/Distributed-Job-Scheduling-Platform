@@ -9,6 +9,7 @@
 ![Redis](https://img.shields.io/badge/Redis-7-red.svg?logo=redis&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-61DAFB.svg?logo=react&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-blue.svg?logo=docker&logoColor=white)
+![CI](https://github.com/ErenKarakus1/Distributed-Job-Scheduling-Platform/actions/workflows/ci.yml/badge.svg)
 
 A microservices-based distributed HTTP job scheduling platform for creating one-time and recurring jobs, executing them across workers, retrying failures, recovering stalled executions, and monitoring execution history through an API and web dashboard.
 
@@ -30,6 +31,8 @@ Developers can create HTTP jobs, schedule future or recurring runs, inspect atte
 - [API Examples](#api-examples)
 - [Main API Routes](#main-api-routes)
 - [Tests and Checks](#tests-and-checks)
+- [Smoke Test](#smoke-test)
+- [Continuous Integration](#continuous-integration)
 - [Testing Retries](#testing-retries)
 - [Testing Stalled Recovery](#testing-stalled-recovery)
 - [Design Decisions](#design-decisions)
@@ -92,6 +95,8 @@ Developers can create HTTP jobs, schedule future or recurring runs, inspect atte
 - Squashed initial Prisma migration
 - React dashboard for jobs, executions, workers, metrics, and audit events
 - Dockerized local platform stack
+- Docker smoke test
+- GitHub Actions CI
 - Backend unit tests and TypeScript checks
 
 ## How It Works
@@ -496,6 +501,10 @@ Open:
 
 ## API Examples
 
+The multiline `curl` examples use Unix-style line continuations with `\`.
+
+In Windows PowerShell, either run each example on one line or replace `\` line continuations with PowerShell backticks.
+
 ### Register and login
 
 ```bash
@@ -680,6 +689,61 @@ Validate Docker Compose configuration:
 ```bash
 docker compose config
 ```
+
+## Smoke Test
+
+The smoke test expects the platform to be running and reachable through the API gateway.
+
+Start the Docker stack:
+
+```bash
+docker compose up -d --build
+```
+
+Run the smoke test:
+
+```bash
+npm run smoke
+```
+
+The smoke test checks:
+
+- API gateway health
+- downstream service health aggregation
+- admin login
+- API key creation
+- job creation
+- manual job execution creation
+- scheduler trigger endpoint
+- execution listing
+- stalled recovery endpoint
+- metrics overview
+- audit event listing
+
+Optional smoke test environment variables:
+
+```env
+SMOKE_BASE_URL=http://localhost:3000
+SMOKE_ADMIN_EMAIL=admin@example.com
+SMOKE_ADMIN_PASSWORD=change-me-admin-password
+SMOKE_HEALTH_TIMEOUT_MS=120000
+```
+
+## Continuous Integration
+
+GitHub Actions runs on pushes and pull requests to `master`.
+
+The workflow performs:
+
+- dependency installation with `npm ci`
+- Prisma client generation
+- backend unit tests
+- TypeScript checks
+- dashboard production build
+- Docker Compose configuration validation
+- full Docker stack boot
+- API smoke test
+- Docker cleanup with volume removal
 
 ## Testing Retries
 
