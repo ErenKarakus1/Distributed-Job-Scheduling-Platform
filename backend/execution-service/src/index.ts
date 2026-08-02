@@ -1,15 +1,23 @@
 import express from "express";
 import { PrismaClient } from "@prisma/client";
 import { requestIdMiddleware, requestLogger } from "./http.js";
-import { calculateStaleBefore, isExecutionStale, planStalledExecutionRecovery } from "./recovery.js";
+import {
+  calculateStaleBefore,
+  isExecutionStale,
+  planStalledExecutionRecovery,
+} from "./recovery.js";
 import { registerExecutionRoutes } from "./routes.js";
 
 const app = express();
 const port = Number(process.env.EXECUTION_SERVICE_PORT ?? 3002);
 const prisma = new PrismaClient();
 const stalledAfterMs = Number(process.env.EXECUTION_STALLED_AFTER_MS ?? 60000);
-const recoveryIntervalMs = Number(process.env.EXECUTION_RECOVERY_INTERVAL_MS ?? 15000);
-const recoveryBatchSize = Number(process.env.EXECUTION_RECOVERY_BATCH_SIZE ?? 50);
+const recoveryIntervalMs = Number(
+  process.env.EXECUTION_RECOVERY_INTERVAL_MS ?? 15000,
+);
+const recoveryBatchSize = Number(
+  process.env.EXECUTION_RECOVERY_BATCH_SIZE ?? 50,
+);
 let recoveryRunning = false;
 let recoveryInterval: NodeJS.Timeout | undefined;
 
@@ -17,7 +25,26 @@ app.use(requestIdMiddleware);
 app.use(requestLogger("execution-service"));
 app.use(express.json());
 
+async function cancelDeletedJobRunnableExecutions(now = new Date()) {
+  const result = await prisma.execution.updateMany({
+    where: {
+      status: { in: ["PENDING", "QUEUED", "RETRY_SCHEDULED", "STALLED"] },
+      job: { status: "DELETED" },
+    },
+    data: {
+      status: "CANCELED",
+      nextAttemptAt: null,
+      lockedByWorkerId: null,
+      lastHeartbeatAt: null,
+      finishedAt: now,
+    },
+  });
+
+  return result.count;
+}
+
 async function recoverStalledExecutions(now = new Date()) {
+  const deletedJobCanceled = await cancelDeletedJobRunnableExecutions(now);
   const staleBefore = calculateStaleBefore(now, stalledAfterMs);
   const stalledExecutions = await prisma.execution.findMany({
     where: {
@@ -31,6 +58,7 @@ async function recoverStalledExecutions(now = new Date()) {
 
   let retryScheduled = 0;
   let failed = 0;
+  let deletedJobRunningCanceled = 0;
 
   for (const execution of stalledExecutions) {
     await prisma.$transaction(async (tx) => {
@@ -39,11 +67,33 @@ async function recoverStalledExecutions(now = new Date()) {
         include: { job: true },
       });
 
-      if (!current || current.status !== "RUNNING" || !isExecutionStale(current, staleBefore)) {
+      if (
+        !current ||
+        current.status !== "RUNNING" ||
+        !isExecutionStale(current, staleBefore)
+      ) {
         return;
       }
 
-      const recovery = planStalledExecutionRecovery(current, now, stalledAfterMs);
+      if (current.job.status === "DELETED") {
+        await tx.execution.update({
+          where: { id: current.id },
+          data: {
+            status: "CANCELED",
+            nextAttemptAt: null,
+            lockedByWorkerId: null,
+            finishedAt: now,
+          },
+        });
+        deletedJobRunningCanceled += 1;
+        return;
+      }
+
+      const recovery = planStalledExecutionRecovery(
+        current,
+        now,
+        stalledAfterMs,
+      );
 
       await tx.executionAttempt.create({
         data: {
@@ -81,6 +131,8 @@ async function recoverStalledExecutions(now = new Date()) {
     scanned: stalledExecutions.length,
     retryScheduled,
     failed,
+    deletedJobCanceled,
+    deletedJobRunningCanceled,
     staleBefore,
   };
 }
@@ -107,10 +159,17 @@ async function runRecoveryLoop() {
 
 registerExecutionRoutes(app, { prisma, recoverStalledExecutions });
 
-app.use((error: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error(error);
-  res.status(500).json({ error: "Internal server error" });
-});
+app.use(
+  (
+    error: Error,
+    _req: express.Request,
+    res: express.Response,
+    _next: express.NextFunction,
+  ) => {
+    console.error(error);
+    res.status(500).json({ error: "Internal server error" });
+  },
+);
 
 const server = app.listen(port, () => {
   console.log(`execution-service listening on port ${port}`);

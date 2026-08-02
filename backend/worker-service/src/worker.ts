@@ -1,6 +1,10 @@
 import axios, { AxiosError } from "axios";
 import { PrismaClient } from "@prisma/client";
-import { calculateBackoffDelayMs, getAttemptStatus, getAxiosErrorMessage } from "./execution.js";
+import {
+  calculateBackoffDelayMs,
+  getAttemptStatus,
+  getAxiosErrorMessage,
+} from "./execution.js";
 import { normalizeHeaders, previewResponseBody } from "./message.js";
 import { createWorkerState } from "./worker-state.js";
 
@@ -20,7 +24,10 @@ type RecordAttemptInput = {
   finishedAt: Date;
 };
 
-export function shouldDeadLetterAttempt(status: RecordAttemptInput["status"], retryable: boolean) {
+export function shouldDeadLetterAttempt(
+  status: RecordAttemptInput["status"],
+  retryable: boolean,
+) {
   return status !== "SUCCEEDED" && !retryable;
 }
 
@@ -46,9 +53,19 @@ export function createWorkerRuntime(deps: WorkerRuntimeDependencies) {
       }
 
       const attemptNumber = execution.attemptCount + 1;
-      const retryable = input.status !== "SUCCEEDED" && attemptNumber < execution.job.maxAttempts;
-      const nextAttemptAt = retryable ? new Date(input.finishedAt.getTime() + calculateBackoffDelayMs(execution.job, attemptNumber + 1)) : null;
-      const deadLetterReason = shouldDeadLetterAttempt(input.status, retryable) ? "MAX_ATTEMPTS_EXHAUSTED" : undefined;
+      const retryable =
+        input.status !== "SUCCEEDED" &&
+        execution.job.status === "ACTIVE" &&
+        attemptNumber < execution.job.maxAttempts;
+      const nextAttemptAt = retryable
+        ? new Date(
+            input.finishedAt.getTime() +
+              calculateBackoffDelayMs(execution.job, attemptNumber + 1),
+          )
+        : null;
+      const deadLetterReason = shouldDeadLetterAttempt(input.status, retryable)
+        ? "MAX_ATTEMPTS_EXHAUSTED"
+        : undefined;
 
       await tx.executionAttempt.create({
         data: {
@@ -73,10 +90,18 @@ export function createWorkerRuntime(deps: WorkerRuntimeDependencies) {
         },
         data: {
           attemptCount: attemptNumber,
-          status: input.status === "SUCCEEDED" ? "SUCCEEDED" : retryable ? "RETRY_SCHEDULED" : "FAILED",
+          status:
+            input.status === "SUCCEEDED"
+              ? "SUCCEEDED"
+              : retryable
+                ? "RETRY_SCHEDULED"
+                : "FAILED",
           nextAttemptAt,
           lockedByWorkerId: null,
-          finishedAt: input.status === "SUCCEEDED" || !retryable ? input.finishedAt : null,
+          finishedAt:
+            input.status === "SUCCEEDED" || !retryable
+              ? input.finishedAt
+              : null,
         },
       });
 
@@ -113,8 +138,33 @@ export function createWorkerRuntime(deps: WorkerRuntimeDependencies) {
       return;
     }
 
-    if (execution.status === "CANCELED" || execution.status === "SUCCEEDED" || execution.status === "FAILED") {
-      console.warn(`execution ${executionId} is already terminal with status ${execution.status}`);
+    if (
+      execution.status === "CANCELED" ||
+      execution.status === "SUCCEEDED" ||
+      execution.status === "FAILED"
+    ) {
+      console.warn(
+        `execution ${executionId} is already terminal with status ${execution.status}`,
+      );
+      return;
+    }
+
+    if (execution.job.status === "DELETED") {
+      await prisma.execution.updateMany({
+        where: {
+          id: executionId,
+          status: { in: ["PENDING", "QUEUED", "RETRY_SCHEDULED", "STALLED"] },
+        },
+        data: {
+          status: "CANCELED",
+          nextAttemptAt: null,
+          lockedByWorkerId: null,
+          finishedAt: new Date(),
+        },
+      });
+      console.warn(
+        `execution ${executionId} was canceled because its job is deleted`,
+      );
       return;
     }
 
@@ -157,7 +207,10 @@ export function createWorkerRuntime(deps: WorkerRuntimeDependencies) {
         executionId,
         status: succeeded ? "SUCCEEDED" : "FAILED",
         httpStatusCode: response.status,
-        responseBodyPreview: previewResponseBody(response.data, responsePreviewLimit),
+        responseBodyPreview: previewResponseBody(
+          response.data,
+          responsePreviewLimit,
+        ),
         startedAt,
         finishedAt,
       });
@@ -169,7 +222,10 @@ export function createWorkerRuntime(deps: WorkerRuntimeDependencies) {
         executionId,
         status: getAttemptStatus(error),
         httpStatusCode: axiosError.response?.status,
-        responseBodyPreview: previewResponseBody(axiosError.response?.data, responsePreviewLimit),
+        responseBodyPreview: previewResponseBody(
+          axiosError.response?.data,
+          responsePreviewLimit,
+        ),
         errorMessage: getAxiosErrorMessage(error),
         startedAt,
         finishedAt,

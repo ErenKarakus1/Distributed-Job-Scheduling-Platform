@@ -18,7 +18,10 @@ class JobPausedError extends Error {
   }
 }
 
-export function registerJobCommandRoutes(app: express.Express, deps: JobRouteDependencies) {
+export function registerJobCommandRoutes(
+  app: express.Express,
+  deps: JobRouteDependencies,
+) {
   const { prisma } = deps;
 
   app.post("/jobs/:id/run", async (req, res, next) => {
@@ -77,7 +80,10 @@ export function registerJobCommandRoutes(app: express.Express, deps: JobRouteDep
 
       res.json(job);
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2025"
+      ) {
         res.status(404).json({ error: "Job not found" });
         return;
       }
@@ -97,7 +103,10 @@ export function registerJobCommandRoutes(app: express.Express, deps: JobRouteDep
 
       res.json(job);
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2025"
+      ) {
         res.status(404).json({ error: "Job not found" });
         return;
       }
@@ -150,7 +159,10 @@ export function registerJobCommandRoutes(app: express.Express, deps: JobRouteDep
 
       res.json(job);
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2025"
+      ) {
         res.status(404).json({ error: "Job not found" });
         return;
       }
@@ -162,14 +174,36 @@ export function registerJobCommandRoutes(app: express.Express, deps: JobRouteDep
   app.delete("/jobs/:id", async (req, res, next) => {
     try {
       const id = parseId(req.params.id);
-      const job = await prisma.job.update({
-        where: { id },
-        data: { status: "DELETED" },
+
+      const job = await prisma.$transaction(async (tx) => {
+        const deletedJob = await tx.job.update({
+          where: { id },
+          data: { status: "DELETED" },
+        });
+
+        await tx.execution.updateMany({
+          where: {
+            jobId: id,
+            status: { in: ["PENDING", "QUEUED", "RETRY_SCHEDULED", "STALLED"] },
+          },
+          data: {
+            status: "CANCELED",
+            nextAttemptAt: null,
+            lockedByWorkerId: null,
+            lastHeartbeatAt: null,
+            finishedAt: new Date(),
+          },
+        });
+
+        return deletedJob;
       });
 
       res.json(job);
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2025"
+      ) {
         res.status(404).json({ error: "Job not found" });
         return;
       }
