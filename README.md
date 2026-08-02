@@ -7,11 +7,36 @@
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue.svg)
 ![RabbitMQ](https://img.shields.io/badge/RabbitMQ-3.13-orange.svg)
 ![Redis](https://img.shields.io/badge/Redis-7-red.svg)
+![React](https://img.shields.io/badge/React-19-61DAFB.svg)
 ![Docker](https://img.shields.io/badge/Docker-Compose-blue.svg)
 
 A microservices-based distributed HTTP job scheduling platform for creating one-time and recurring jobs, executing them across workers, retrying failures, recovering stalled executions, and monitoring execution history through an API and web dashboard.
 
 Developers can create HTTP jobs, schedule future or recurring runs, inspect attempts and response metadata, manually retry failed executions, recover stalled work, manage dashboard users, authenticate with JWTs or API keys, and run the full platform locally with Docker Compose.
+
+## Table of Contents
+
+- [Tech Stack](#tech-stack)
+- [Features](#features)
+- [How It Works](#how-it-works)
+- [Retry and Recovery](#retry-and-recovery)
+- [Authentication and Authorization](#authentication-and-authorization)
+- [Architecture](#architecture)
+- [Project Structure](#project-structure)
+- [Requirements](#requirements)
+- [Run with Docker](#run-with-docker)
+- [Environment Configuration](#environment-configuration)
+- [Local Development](#local-development)
+- [API Examples](#api-examples)
+- [Main API Routes](#main-api-routes)
+- [Tests and Checks](#tests-and-checks)
+- [Testing Retries](#testing-retries)
+- [Testing Stalled Recovery](#testing-stalled-recovery)
+- [Design Decisions](#design-decisions)
+- [Known Limitations](#known-limitations)
+- [Security Notes](#security-notes)
+- [Possible Future Improvements](#possible-future-improvements)
+- [License](#license)
 
 ## Tech Stack
 
