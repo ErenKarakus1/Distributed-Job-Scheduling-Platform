@@ -193,9 +193,10 @@ flowchart LR
 
     Scheduler -->|Publish due executions| RabbitMQ[(RabbitMQ)]
     RabbitMQ -->|execution.ready| Workers
-    RabbitMQ -->|malformed messages| DeadLetters[Dead Letter Records]
+    RabbitMQ -->|rejected malformed messages| RabbitDead[(RabbitMQ Dead Letter Queue)]
     Workers -->|HTTP request| Target[External HTTP Endpoint]
     Workers --> Executions
+    Workers -->|malformed messages and exhausted attempts| DeadLetters[Dead Letter Records]
 
     Executions -->|Retry or recover| RabbitMQ
     Executions -->|exhausted failures| DeadLetters
