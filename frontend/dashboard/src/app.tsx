@@ -423,6 +423,17 @@ export function App() {
   }
 
   async function revokeApiKey(apiKeyId: string) {
+    const apiKey = apiKeys.find((row) => row.id === apiKeyId);
+    const apiKeyLabel = apiKey?.name ? `"${apiKey.name}"` : "this API key";
+    const confirmed = window.confirm(
+      `Revoke ${apiKeyLabel}? Existing clients using it will lose access.`,
+    );
+
+    if (!confirmed) {
+      setMessage("Canceled API key revoke");
+      return;
+    }
+
     try {
       setMessage("Revoking API key");
       await authRequest(`/internal/api-keys/${apiKeyId}`, { method: "DELETE" });
@@ -472,6 +483,20 @@ export function App() {
   }
 
   async function updateUserRole(userId: string, role: "ADMIN" | "VIEWER") {
+    const user = users.find((row) => row.id === userId);
+
+    if (user?.role === "VIEWER" && role === "ADMIN") {
+      const userLabel = user.email ? `"${user.email}"` : "this user";
+      const confirmed = window.confirm(
+        `Promote ${userLabel} to ADMIN? They will be able to mutate platform data.`,
+      );
+
+      if (!confirmed) {
+        setMessage("Canceled role change");
+        return;
+      }
+    }
+
     try {
       setMessage("Updating user role");
       await authRequest(`/internal/users/${userId}/role`, {

@@ -82,7 +82,7 @@ export type ExecutionRow = {
   attemptCount?: number;
   createdAt?: string;
   startedAt?: string | null;
-  job?: Pick<JobRow, "id" | "name"> | null;
+  job?: Pick<JobRow, "id" | "name" | "status"> | null;
   attempts?: ExecutionAttempt[];
 };
 

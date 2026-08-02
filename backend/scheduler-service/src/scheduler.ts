@@ -84,7 +84,11 @@ export function createScheduler(deps: SchedulerDependencies) {
           where: { id: schedule.id },
           data: {
             lastRunAt: lockedSchedule.nextRunAt,
-            nextRunAt: nextCronRun(lockedSchedule.cronExpression, lockedSchedule.timezone, now),
+            nextRunAt: nextCronRun(
+              lockedSchedule.cronExpression,
+              lockedSchedule.timezone,
+              now,
+            ),
           },
         });
 
@@ -104,6 +108,7 @@ export function createScheduler(deps: SchedulerDependencies) {
       where: {
         status: "RETRY_SCHEDULED",
         nextAttemptAt: { lte: now },
+        job: { status: "ACTIVE" },
       },
       take: batchSize,
       orderBy: { nextAttemptAt: "asc" },
@@ -135,12 +140,13 @@ export function createScheduler(deps: SchedulerDependencies) {
   }
 
   async function runSchedulerOnce(now = new Date()): Promise<SchedulerStats> {
-    const [oneTimeQueued, recurringQueued, retriesQueued, pendingQueued] = await Promise.all([
-      scheduleDueOneTimeJobs(now),
-      scheduleDueRecurringJobs(now),
-      scheduleDueRetries(now),
-      scheduleDuePendingExecutions(now),
-    ]);
+    const [oneTimeQueued, recurringQueued, retriesQueued, pendingQueued] =
+      await Promise.all([
+        scheduleDueOneTimeJobs(now),
+        scheduleDueRecurringJobs(now),
+        scheduleDueRetries(now),
+        scheduleDuePendingExecutions(now),
+      ]);
 
     return { oneTimeQueued, recurringQueued, retriesQueued, pendingQueued };
   }

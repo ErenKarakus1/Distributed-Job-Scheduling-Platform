@@ -3,7 +3,15 @@ import { Prisma, PrismaClient } from "@prisma/client";
 import { sendValidationError } from "./http.js";
 import { calculateBackoffDelayMs } from "./retry.js";
 import type { RecoverStalledExecutions } from "./route-types.js";
-import { heartbeatSchema, markQueuedSchema, markRunningSchema, parseId, recordAttemptSchema, recoverStalledSchema, retryExecutionSchema } from "./validation.js";
+import {
+  heartbeatSchema,
+  markQueuedSchema,
+  markRunningSchema,
+  parseId,
+  recordAttemptSchema,
+  recoverStalledSchema,
+  retryExecutionSchema,
+} from "./validation.js";
 
 type CommandRouteDependencies = {
   prisma: PrismaClient;
@@ -17,7 +25,17 @@ class ExecutionNotFoundError extends Error {
   }
 }
 
-export function registerExecutionCommandRoutes(app: express.Express, deps: CommandRouteDependencies) {
+class ExecutionJobDeletedError extends Error {
+  constructor() {
+    super("Execution cannot be retried because its job is deleted");
+    this.name = "ExecutionJobDeletedError";
+  }
+}
+
+export function registerExecutionCommandRoutes(
+  app: express.Express,
+  deps: CommandRouteDependencies,
+) {
   const { prisma, recoverStalledExecutions } = deps;
 
   app.post("/executions/:id/mark-queued", async (req, res, next) => {
@@ -33,7 +51,10 @@ export function registerExecutionCommandRoutes(app: express.Express, deps: Comma
 
       res.json(execution);
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2025"
+      ) {
         res.status(404).json({ error: "Execution not found" });
         return;
       }
@@ -61,7 +82,10 @@ export function registerExecutionCommandRoutes(app: express.Express, deps: Comma
 
       res.json(execution);
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2025"
+      ) {
         res.status(404).json({ error: "Execution not found" });
         return;
       }
@@ -85,8 +109,13 @@ export function registerExecutionCommandRoutes(app: express.Express, deps: Comma
 
       res.json(execution);
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
-        res.status(404).json({ error: "Running execution not found for worker" });
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2025"
+      ) {
+        res
+          .status(404)
+          .json({ error: "Running execution not found for worker" });
         return;
       }
 
@@ -127,17 +156,26 @@ export function registerExecutionCommandRoutes(app: express.Express, deps: Comma
         });
 
         const succeeded = data.status === "SUCCEEDED";
-        const retryable = !succeeded && attemptNumber < execution.job.maxAttempts;
+        const retryable =
+          !succeeded && attemptNumber < execution.job.maxAttempts;
         const nextAttemptAt = retryable
-          ? new Date(finishedAt.getTime() + calculateBackoffDelayMs(execution.job, attemptNumber + 1))
+          ? new Date(
+              finishedAt.getTime() +
+                calculateBackoffDelayMs(execution.job, attemptNumber + 1),
+            )
           : null;
-        const deadLetterReason = !succeeded && !retryable ? "MAX_ATTEMPTS_EXHAUSTED" : undefined;
+        const deadLetterReason =
+          !succeeded && !retryable ? "MAX_ATTEMPTS_EXHAUSTED" : undefined;
 
         const updatedExecution = await tx.execution.update({
           where: { id },
           data: {
             attemptCount: attemptNumber,
-            status: succeeded ? "SUCCEEDED" : retryable ? "RETRY_SCHEDULED" : "FAILED",
+            status: succeeded
+              ? "SUCCEEDED"
+              : retryable
+                ? "RETRY_SCHEDULED"
+                : "FAILED",
             nextAttemptAt,
             lockedByWorkerId: null,
             finishedAt: succeeded || !retryable ? finishedAt : null,
@@ -183,6 +221,7 @@ export function registerExecutionCommandRoutes(app: express.Express, deps: Comma
 
       const existing = await prisma.execution.findUnique({
         where: { id },
+        include: { job: true },
       });
 
       if (!existing) {
@@ -191,7 +230,9 @@ export function registerExecutionCommandRoutes(app: express.Express, deps: Comma
       }
 
       if (["SUCCEEDED", "FAILED", "CANCELED"].includes(existing.status)) {
-        res.status(409).json({ error: `Execution is already ${existing.status}` });
+        res
+          .status(409)
+          .json({ error: `Execution is already ${existing.status}` });
         return;
       }
 
@@ -208,7 +249,10 @@ export function registerExecutionCommandRoutes(app: express.Express, deps: Comma
 
       res.json(execution);
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2025"
+      ) {
         res.status(404).json({ error: "Execution not found" });
         return;
       }
@@ -225,6 +269,7 @@ export function registerExecutionCommandRoutes(app: express.Express, deps: Comma
 
       const existing = await prisma.execution.findUnique({
         where: { id },
+        include: { job: true },
       });
 
       if (!existing) {
@@ -233,7 +278,16 @@ export function registerExecutionCommandRoutes(app: express.Express, deps: Comma
       }
 
       if (!["FAILED", "CANCELED"].includes(existing.status)) {
-        res.status(409).json({ error: `Execution cannot be retried from ${existing.status}` });
+        res.status(409).json({
+          error: `Execution cannot be retried from ${existing.status}`,
+        });
+        return;
+      }
+
+      if (existing.job.status === "DELETED") {
+        res.status(409).json({
+          error: "Execution cannot be retried because its job is deleted",
+        });
         return;
       }
 
@@ -252,7 +306,10 @@ export function registerExecutionCommandRoutes(app: express.Express, deps: Comma
 
       res.json(execution);
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2025"
+      ) {
         res.status(404).json({ error: "Execution not found" });
         return;
       }
@@ -283,6 +340,19 @@ export function registerExecutionCommandRoutes(app: express.Express, deps: Comma
         }
 
         if (message.executionId) {
+          const execution = await tx.execution.findUnique({
+            where: { id: message.executionId },
+            include: { job: true },
+          });
+
+          if (!execution) {
+            throw new ExecutionNotFoundError();
+          }
+
+          if (execution.job.status === "DELETED") {
+            throw new ExecutionJobDeletedError();
+          }
+
           await tx.execution.update({
             where: { id: message.executionId },
             data: {
@@ -309,12 +379,23 @@ export function registerExecutionCommandRoutes(app: express.Express, deps: Comma
         return;
       }
 
-      if (error instanceof Error && error.message.startsWith("Dead-letter message was already")) {
+      if (
+        error instanceof Error &&
+        error.message.startsWith("Dead-letter message was already")
+      ) {
         res.status(409).json({ error: error.message });
         return;
       }
 
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+      if (error instanceof ExecutionJobDeletedError) {
+        res.status(409).json({ error: error.message });
+        return;
+      }
+
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2025"
+      ) {
         res.status(404).json({ error: "Related execution not found" });
         return;
       }
@@ -337,7 +418,9 @@ export function registerExecutionCommandRoutes(app: express.Express, deps: Comma
       }
 
       if (message.requeuedAt) {
-        res.status(409).json({ error: "Dead-letter message was already requeued" });
+        res
+          .status(409)
+          .json({ error: "Dead-letter message was already requeued" });
         return;
       }
 

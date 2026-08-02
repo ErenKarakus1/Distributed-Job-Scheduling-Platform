@@ -15,8 +15,11 @@ export function canCancelExecution(status: unknown) {
   return !terminalExecutionStatuses.has(String(status));
 }
 
-export function canRetryExecution(status: unknown) {
-  return ["FAILED", "CANCELED"].includes(String(status));
+export function canRetryExecution(status: unknown, jobStatus?: unknown) {
+  return (
+    ["FAILED", "CANCELED"].includes(String(status)) &&
+    String(jobStatus) !== "DELETED"
+  );
 }
 
 export function getJobRowActions(status: unknown): RowAction[] {
@@ -89,7 +92,10 @@ export function DataPanel(props: {
                 const showCancelExecution = canCancelExecution(
                   execution.status,
                 );
-                const showRetryExecution = canRetryExecution(execution.status);
+                const showRetryExecution = canRetryExecution(
+                  execution.status,
+                  execution.job?.status,
+                );
                 const jobActions = props.onJobAction
                   ? getJobRowActions(item.status)
                   : [];

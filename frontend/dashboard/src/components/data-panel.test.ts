@@ -24,6 +24,11 @@ test("canRetryExecution allows failed and canceled executions", () => {
   assert.equal(canRetryExecution("RUNNING"), false);
 });
 
+test("canRetryExecution blocks executions for deleted jobs", () => {
+  assert.equal(canRetryExecution("FAILED", "DELETED"), false);
+  assert.equal(canRetryExecution("CANCELED", "DELETED"), false);
+});
+
 test("getJobRowActions exposes active job controls", () => {
   assert.deepEqual(
     getJobRowActions("ACTIVE").map((action) => action.action),
