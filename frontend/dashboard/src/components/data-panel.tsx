@@ -2,6 +2,13 @@ import React from "react";
 import type { ExecutionAttempt, ExecutionRow, JobRow } from "../types.js";
 
 type DataPanelRow = JobRow | ExecutionRow;
+type JobAction = "run" | "pause" | "resume" | "edit" | "delete";
+type RowAction = {
+  action: JobAction;
+  className?: string;
+  label: string;
+};
+
 const terminalExecutionStatuses = new Set(["SUCCEEDED", "FAILED", "CANCELED"]);
 
 export function canCancelExecution(status: unknown) {
@@ -12,11 +19,37 @@ export function canRetryExecution(status: unknown) {
   return ["FAILED", "CANCELED"].includes(String(status));
 }
 
+export function getJobRowActions(status: unknown): RowAction[] {
+  const normalizedStatus = String(status);
+
+  if (normalizedStatus === "DELETED") {
+    return [];
+  }
+
+  const actions: RowAction[] = [
+    { action: "edit", label: "Edit" },
+    { action: "delete", className: "danger-button", label: "Delete" },
+  ];
+
+  if (normalizedStatus === "PAUSED") {
+    return [
+      { action: "resume", className: "primary-button", label: "Resume" },
+      ...actions,
+    ];
+  }
+
+  return [
+    { action: "run", className: "primary-button", label: "Run" },
+    { action: "pause", label: "Pause" },
+    ...actions,
+  ];
+}
+
 export function DataPanel(props: {
   title: string;
   rows: DataPanelRow[];
   emptyText: string;
-  onJobAction?: (jobId: string, action: "run" | "pause" | "resume" | "edit" | "delete") => void;
+  onJobAction?: (jobId: string, action: JobAction) => void;
   onExecutionAction?: (executionId: string, action: "cancel" | "retry") => void;
   expandableAttempts?: boolean;
 }) {
@@ -37,7 +70,9 @@ export function DataPanel(props: {
                 <th>Name / Job</th>
                 <th>Created</th>
                 {props.expandableAttempts && <th>Attempts</th>}
-                {(props.onJobAction || props.onExecutionAction) && <th>Actions</th>}
+                {(props.onJobAction || props.onExecutionAction) && (
+                  <th>Actions</th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -45,11 +80,19 @@ export function DataPanel(props: {
                 const item = row as DataPanelRow;
                 const execution = item as ExecutionRow;
                 const attempts = execution.attempts ?? [];
-                const displayName = "name" in item ? item.name : execution.job?.name ?? execution.jobId ?? "";
+                const displayName =
+                  "name" in item
+                    ? item.name
+                    : (execution.job?.name ?? execution.jobId ?? "");
                 const displayDate = item.createdAt ?? execution.startedAt ?? "";
                 const rowId = item.id ?? String(index);
-                const showCancelExecution = canCancelExecution(execution.status);
+                const showCancelExecution = canCancelExecution(
+                  execution.status,
+                );
                 const showRetryExecution = canRetryExecution(execution.status);
+                const jobActions = props.onJobAction
+                  ? getJobRowActions(item.status)
+                  : [];
 
                 return (
                   <React.Fragment key={rowId}>
@@ -60,8 +103,14 @@ export function DataPanel(props: {
                       <td>{String(displayDate)}</td>
                       {props.expandableAttempts && (
                         <td>
-                          <button className="link-button" onClick={() => setExpandedId(expandedId === rowId ? null : rowId)}>
-                            {attempts.length} attempt{attempts.length === 1 ? "" : "s"}
+                          <button
+                            className="link-button"
+                            onClick={() =>
+                              setExpandedId(expandedId === rowId ? null : rowId)
+                            }
+                          >
+                            {attempts.length} attempt
+                            {attempts.length === 1 ? "" : "s"}
                           </button>
                         </td>
                       )}
@@ -70,17 +119,48 @@ export function DataPanel(props: {
                           <div className="row-actions">
                             {props.onJobAction && (
                               <>
-                                <button onClick={() => props.onJobAction?.(item.id, "run")}>Run</button>
-                                <button onClick={() => props.onJobAction?.(item.id, "edit")}>Edit</button>
-                                <button onClick={() => props.onJobAction?.(item.id, "pause")}>Pause</button>
-                                <button onClick={() => props.onJobAction?.(item.id, "resume")}>Resume</button>
-                                <button onClick={() => props.onJobAction?.(item.id, "delete")}>Delete</button>
+                                {jobActions.map((jobAction) => (
+                                  <button
+                                    className={jobAction.className}
+                                    key={jobAction.action}
+                                    onClick={() =>
+                                      props.onJobAction?.(
+                                        item.id,
+                                        jobAction.action,
+                                      )
+                                    }
+                                  >
+                                    {jobAction.label}
+                                  </button>
+                                ))}
                               </>
                             )}
                             {props.onExecutionAction && (
                               <>
-                                {showCancelExecution && <button onClick={() => props.onExecutionAction?.(item.id, "cancel")}>Cancel</button>}
-                                {showRetryExecution && <button onClick={() => props.onExecutionAction?.(item.id, "retry")}>Retry</button>}
+                                {showCancelExecution && (
+                                  <button
+                                    onClick={() =>
+                                      props.onExecutionAction?.(
+                                        item.id,
+                                        "cancel",
+                                      )
+                                    }
+                                  >
+                                    Cancel
+                                  </button>
+                                )}
+                                {showRetryExecution && (
+                                  <button
+                                    onClick={() =>
+                                      props.onExecutionAction?.(
+                                        item.id,
+                                        "retry",
+                                      )
+                                    }
+                                  >
+                                    Retry
+                                  </button>
+                                )}
                               </>
                             )}
                           </div>
@@ -125,7 +205,11 @@ function ExecutionDetails(props: { execution: ExecutionRow }) {
         {details.map(([label, value]) => (
           <div key={label}>
             <dt>{label}</dt>
-            <dd>{value === undefined || value === null || value === "" ? "-" : String(value)}</dd>
+            <dd>
+              {value === undefined || value === null || value === ""
+                ? "-"
+                : String(value)}
+            </dd>
           </div>
         ))}
       </dl>
@@ -142,16 +226,30 @@ function AttemptDetails(props: { attempts: ExecutionAttempt[] }) {
   return (
     <div className="attempt-list">
       {props.attempts.map((attempt, index) => {
-        const errorMessage = attempt.errorMessage ? String(attempt.errorMessage) : undefined;
-        const responseBodyPreview = attempt.responseBodyPreview ? String(attempt.responseBodyPreview) : undefined;
+        const errorMessage = attempt.errorMessage
+          ? String(attempt.errorMessage)
+          : undefined;
+        const responseBodyPreview = attempt.responseBodyPreview
+          ? String(attempt.responseBodyPreview)
+          : undefined;
 
         return (
           <article className="attempt-card" key={String(attempt.id ?? index)}>
             <div>
-              <strong>Attempt {String(attempt.attemptNumber ?? index + 1)}</strong>
+              <strong>
+                Attempt {String(attempt.attemptNumber ?? index + 1)}
+              </strong>
               <span>{String(attempt.status ?? "")}</span>
-              <span>{attempt.httpStatusCode ? `HTTP ${String(attempt.httpStatusCode)}` : "No status code"}</span>
-              <span>{attempt.durationMs ? `${String(attempt.durationMs)}ms` : "No duration"}</span>
+              <span>
+                {attempt.httpStatusCode
+                  ? `HTTP ${String(attempt.httpStatusCode)}`
+                  : "No status code"}
+              </span>
+              <span>
+                {attempt.durationMs
+                  ? `${String(attempt.durationMs)}ms`
+                  : "No duration"}
+              </span>
             </div>
             {errorMessage && <pre>{errorMessage}</pre>}
             {responseBodyPreview && <pre>{responseBodyPreview}</pre>}

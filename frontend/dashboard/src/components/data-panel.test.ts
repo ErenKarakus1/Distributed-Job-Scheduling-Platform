@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { canCancelExecution, canRetryExecution } from "./data-panel.js";
+import {
+  canCancelExecution,
+  canRetryExecution,
+  getJobRowActions,
+} from "./data-panel.js";
 
 test("canCancelExecution allows only non-terminal execution statuses", () => {
   assert.equal(canCancelExecution("PENDING"), true);
@@ -18,4 +22,22 @@ test("canRetryExecution allows failed and canceled executions", () => {
   assert.equal(canRetryExecution("CANCELED"), true);
   assert.equal(canRetryExecution("SUCCEEDED"), false);
   assert.equal(canRetryExecution("RUNNING"), false);
+});
+
+test("getJobRowActions exposes active job controls", () => {
+  assert.deepEqual(
+    getJobRowActions("ACTIVE").map((action) => action.action),
+    ["run", "pause", "edit", "delete"],
+  );
+});
+
+test("getJobRowActions exposes paused job controls", () => {
+  assert.deepEqual(
+    getJobRowActions("PAUSED").map((action) => action.action),
+    ["resume", "edit", "delete"],
+  );
+});
+
+test("getJobRowActions hides controls for deleted jobs", () => {
+  assert.deepEqual(getJobRowActions("DELETED"), []);
 });
