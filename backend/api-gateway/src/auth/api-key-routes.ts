@@ -1,21 +1,20 @@
 import express from "express";
 import { randomBytes } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
-import { hashApiKey } from "./auth.js";
-import { hasPrismaCode, hideDevelopmentRoute, sendZodError } from "./auth-route-utils.js";
+import { hashApiKey, routeParam } from "./auth.js";
+import { hasPrismaCode, sendZodError } from "./auth-route-utils.js";
 import { createApiKeySchema, parseRouteId } from "../validation.js";
 
 type ApiKeyRouteDependencies = {
   prisma: PrismaClient;
+  requireAdminUser: express.RequestHandler;
 };
 
 export function registerApiKeyRoutes(app: express.Express, deps: ApiKeyRouteDependencies) {
-  const { prisma } = deps;
+  const { prisma, requireAdminUser } = deps;
 
-  app.post("/internal/api-keys", async (req, res, next) => {
+  app.post("/internal/api-keys", requireAdminUser, async (req, res, next) => {
     try {
-      if (hideDevelopmentRoute(res)) return;
-
       const data = createApiKeySchema.parse(req.body);
       const apiKey = `djsp_${randomBytes(32).toString("hex")}`;
       const key = await prisma.apiKey.create({
@@ -36,10 +35,8 @@ export function registerApiKeyRoutes(app: express.Express, deps: ApiKeyRouteDepe
     }
   });
 
-  app.get("/internal/api-keys", async (_req, res, next) => {
+  app.get("/internal/api-keys", requireAdminUser, async (_req, res, next) => {
     try {
-      if (hideDevelopmentRoute(res)) return;
-
       const keys = await prisma.apiKey.findMany({
         select: {
           id: true,
@@ -56,11 +53,9 @@ export function registerApiKeyRoutes(app: express.Express, deps: ApiKeyRouteDepe
     }
   });
 
-  app.delete("/internal/api-keys/:id", async (req, res, next) => {
+  app.delete("/internal/api-keys/:id", requireAdminUser, async (req, res, next) => {
     try {
-      if (hideDevelopmentRoute(res)) return;
-
-      const id = parseRouteId(req.params.id);
+      const id = parseRouteId(routeParam(req.params.id) ?? "");
       await prisma.apiKey.delete({
         where: { id },
       });

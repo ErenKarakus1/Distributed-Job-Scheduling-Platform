@@ -8,6 +8,7 @@ type SignUserToken = (user: { id: string; email: string; role: string }) => stri
 
 type AuthRouteDependencies = {
   prisma: PrismaClient;
+  requireAdminUser: express.RequestHandler;
   requireJwt: express.RequestHandler;
   signUserToken: SignUserToken;
 };

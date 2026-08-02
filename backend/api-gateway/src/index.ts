@@ -73,7 +73,7 @@ function signUserToken(user: { id: string; email: string; role: string }) {
 }
 
 registerHealthRoutes(app, { services });
-registerAuthRoutes(app, { prisma, requireJwt, signUserToken });
+registerAuthRoutes(app, { prisma, requireAdminUser, requireJwt, signUserToken });
 
 app.use("/api", rateLimitRequests, requireApiAuth);
 registerAuditRoutes(app, { prisma });

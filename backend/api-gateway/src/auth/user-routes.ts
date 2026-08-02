@@ -1,19 +1,19 @@
 import express from "express";
 import type { PrismaClient } from "@prisma/client";
-import { hasPrismaCode, hideDevelopmentRoute, sendZodError } from "./auth-route-utils.js";
+import { routeParam } from "./auth.js";
+import { hasPrismaCode, sendZodError } from "./auth-route-utils.js";
 import { parseRouteId, updateUserRoleSchema } from "../validation.js";
 
 type UserRouteDependencies = {
   prisma: PrismaClient;
+  requireAdminUser: express.RequestHandler;
 };
 
 export function registerUserRoutes(app: express.Express, deps: UserRouteDependencies) {
-  const { prisma } = deps;
+  const { prisma, requireAdminUser } = deps;
 
-  app.get("/internal/users", async (_req, res, next) => {
+  app.get("/internal/users", requireAdminUser, async (_req, res, next) => {
     try {
-      if (hideDevelopmentRoute(res)) return;
-
       const users = await prisma.user.findMany({
         select: {
           id: true,
@@ -32,11 +32,9 @@ export function registerUserRoutes(app: express.Express, deps: UserRouteDependen
     }
   });
 
-  app.patch("/internal/users/:id/role", async (req, res, next) => {
+  app.patch("/internal/users/:id/role", requireAdminUser, async (req, res, next) => {
     try {
-      if (hideDevelopmentRoute(res)) return;
-
-      const id = parseRouteId(req.params.id);
+      const id = parseRouteId(routeParam(req.params.id) ?? "");
       const data = updateUserRoleSchema.parse(req.body);
       const user = await prisma.user.update({
         where: { id },
