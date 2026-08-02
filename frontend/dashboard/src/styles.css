@@ -285,10 +285,9 @@ textarea {
 }
 
 .auth-form:has(input:nth-of-type(3)) {
-  grid-template-columns: 120px minmax(160px, 1fr) minmax(140px, 1fr) minmax(
-      140px,
-      1fr
-    ) 96px;
+  grid-template-columns:
+    120px minmax(160px, 1fr) minmax(140px, 1fr) minmax(140px, 1fr)
+    96px;
 }
 
 .panel {
@@ -377,10 +376,9 @@ textarea {
 
 .audit-filter-bar {
   display: grid;
-  grid-template-columns: 120px minmax(120px, 1fr) minmax(120px, 1fr) minmax(
-      160px,
-      1fr
-    ) 90px 96px;
+  grid-template-columns:
+    120px minmax(120px, 1fr) minmax(120px, 1fr) minmax(160px, 1fr)
+    90px 96px;
   gap: 12px;
   align-items: end;
   margin-bottom: 16px;
@@ -460,10 +458,9 @@ textarea {
 }
 
 .request-grid {
-  grid-template-columns: minmax(180px, 1.1fr) 150px 130px minmax(
-      240px,
-      2fr
-    ) 130px;
+  grid-template-columns:
+    minmax(180px, 1.1fr) 150px 130px minmax(240px, 2fr)
+    130px;
 }
 
 .schedule-grid {
@@ -480,6 +477,13 @@ textarea {
 
 .url-field {
   min-width: 0;
+}
+
+.field-hint {
+  min-height: 18px;
+  color: #53627a;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .job-form-actions {

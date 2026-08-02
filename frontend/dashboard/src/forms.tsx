@@ -1,4 +1,5 @@
 import type { AuditFilters, NewJobFormState } from "./types.js";
+import { humanizeCronExpression } from "./utils/cron.js";
 
 const fallbackTimezones = [
   "UTC",
@@ -60,6 +61,7 @@ type JobCreateFormProps = {
 export function JobCreateForm(props: JobCreateFormProps) {
   const { job, onChange } = props;
   const isEditing = props.mode === "edit";
+  const cronPreview = humanizeCronExpression(job.cronExpression);
 
   return (
     <section className="panel create-panel">
@@ -164,6 +166,7 @@ export function JobCreateForm(props: JobCreateFormProps) {
                     }
                     required
                   />
+                  <span className="field-hint">{cronPreview}</span>
                 </label>
                 <label>
                   Timezone
