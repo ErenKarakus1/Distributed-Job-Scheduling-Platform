@@ -2,7 +2,7 @@
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?logo=open-source-initiative&logoColor=white)
 ![Node.js](https://img.shields.io/badge/Node.js-22-green.svg?logo=node.js&logoColor=white)
-![Express](https://img.shields.io/badge/Express-5-black.svg?logo=express&logoColor=white)
+![Express](https://img.shields.io/badge/Express-4-black.svg?logo=express&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue.svg?logo=typescript&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue.svg?logo=postgresql&logoColor=white)
 ![RabbitMQ](https://img.shields.io/badge/RabbitMQ-3.13-orange.svg?logo=rabbitmq&logoColor=white)
@@ -319,7 +319,7 @@ Docker Compose starts:
 - `admin-bootstrap` - local admin user creation
 - `postgres` - durable platform database
 - `rabbitmq` - execution queue and management UI
-- `redis` - rate-limit store and fast coordination dependency
+- `redis` - shared API rate-limit store
 
 ### View running services
 
@@ -675,7 +675,7 @@ curl -X POST http://localhost:3000/api/schedule/run \
 - `GET /health`
 - `GET /health/services`
 
-### Development Admin Routes
+### Internal Admin Routes
 
 - `POST /internal/api-keys`
 - `GET /internal/api-keys`
@@ -840,7 +840,7 @@ RabbitMQ is used for message delivery and rejection behavior, while PostgreSQL s
 
 ### Redis
 
-Redis is used for fast coordination paths such as API rate limiting. Durable platform state remains in PostgreSQL.
+Redis is used for shared API rate limiting in the gateway. Durable platform state and scheduler coordination remain in PostgreSQL.
 
 ### JWT and API Keys
 
