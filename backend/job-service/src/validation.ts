@@ -68,6 +68,24 @@ const jobPayloadSchema = z.object({
     .optional(),
 });
 
+function validateRetryDelayRange(
+  job: { retryInitialDelayMs?: number; retryMaxDelayMs?: number },
+  ctx: z.RefinementCtx,
+) {
+  if (
+    job.retryInitialDelayMs !== undefined &&
+    job.retryMaxDelayMs !== undefined &&
+    job.retryInitialDelayMs > job.retryMaxDelayMs
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "retryInitialDelayMs must be less than or equal to retryMaxDelayMs",
+      path: ["retryInitialDelayMs"],
+    });
+  }
+}
+
 export const createJobSchema = jobPayloadSchema.superRefine((job, ctx) => {
   if (job.type === "ONE_TIME" && !job.runAt) {
     ctx.addIssue({
@@ -103,6 +121,8 @@ export const createJobSchema = jobPayloadSchema.superRefine((job, ctx) => {
       });
     }
   }
+
+  validateRetryDelayRange(job, ctx);
 });
 
 export const updateJobSchema = jobPayloadSchema
@@ -111,18 +131,7 @@ export const updateJobSchema = jobPayloadSchema
     status: mutableJobStatusSchema.optional(),
   })
   .superRefine((job, ctx) => {
-    if (
-      job.retryInitialDelayMs &&
-      job.retryMaxDelayMs &&
-      job.retryInitialDelayMs > job.retryMaxDelayMs
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message:
-          "retryInitialDelayMs must be less than or equal to retryMaxDelayMs",
-        path: ["retryInitialDelayMs"],
-      });
-    }
+    validateRetryDelayRange(job, ctx);
 
     if (job.schedule) {
       if (!isValidTimezone(job.schedule.timezone)) {

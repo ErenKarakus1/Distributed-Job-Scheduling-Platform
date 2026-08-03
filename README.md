@@ -3,7 +3,7 @@
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?logo=open-source-initiative&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-blue.svg?logo=docker&logoColor=white)
 ![CI](https://github.com/ErenKarakus1/Distributed-Job-Scheduling-Platform/actions/workflows/ci.yml/badge.svg)
-![Tests](https://img.shields.io/badge/Tests-81%20passing-brightgreen.svg?logo=node.js&logoColor=white)
+![Tests](https://img.shields.io/badge/Tests-83%20passing-brightgreen.svg?logo=node.js&logoColor=white)
 
 ![Node.js](https://img.shields.io/badge/Node.js-22-green.svg?logo=node.js&logoColor=white)
 ![Express](https://img.shields.io/badge/Express-4-black.svg?logo=express&logoColor=white)
@@ -695,7 +695,7 @@ curl -X POST http://localhost:3000/api/schedule/run \
 
 ## Tests and Checks
 
-The current automated suite includes 81 passing unit tests across the gateway, job service, execution service, scheduler service, worker service, and dashboard.
+The current automated suite includes 83 passing unit tests across the gateway, job service, execution service, scheduler service, worker service, and dashboard.
 
 Run all workspace tests:
 

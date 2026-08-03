@@ -75,10 +75,33 @@ test("createJobSchema reports invalid recurring timezones on the timezone field"
   );
 });
 
+test("createJobSchema rejects retry delay ranges that cannot back off", () => {
+  const result = createJobSchema.safeParse({
+    ...baseJob,
+    type: "ONE_TIME",
+    runAt: "2026-08-02T12:00:00.000Z",
+    retryInitialDelayMs: 5000,
+    retryMaxDelayMs: 1000,
+  });
+
+  assert.equal(result.success, false);
+  assert.equal(result.error.issues[0]?.path.join("."), "retryInitialDelayMs");
+});
+
 test("updateJobSchema rejects retry delay ranges that cannot back off", () => {
   const result = updateJobSchema.safeParse({
     retryInitialDelayMs: 5000,
     retryMaxDelayMs: 1000,
+  });
+
+  assert.equal(result.success, false);
+  assert.equal(result.error.issues[0]?.path.join("."), "retryInitialDelayMs");
+});
+
+test("updateJobSchema rejects retry ranges when max delay is zero", () => {
+  const result = updateJobSchema.safeParse({
+    retryInitialDelayMs: 1,
+    retryMaxDelayMs: 0,
   });
 
   assert.equal(result.success, false);
