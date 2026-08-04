@@ -59,6 +59,8 @@ const deadLetterActionLabels = {
   requeue: "Requeue",
 } as const;
 
+const deadLetterResourceLabel = "Dead-letter message";
+
 export function App() {
   const apiBaseUrl = defaultApiBaseUrl;
   const [authToken, setAuthToken] = React.useState(
@@ -483,7 +485,7 @@ export function App() {
     const actionLabel = deadLetterActionLabels[action];
 
     try {
-      setMessage(`${actionLabel} dead-letter message`);
+      setMessage(`${actionLabel} ${deadLetterResourceLabel}`);
       if (action === "requeue") {
         await request(`/api/dead-letter/${messageId}/requeue`, {
           method: "POST",
@@ -493,12 +495,12 @@ export function App() {
         await request(`/api/dead-letter/${messageId}`, { method: "DELETE" });
       }
       await refreshDeadLetters();
-      setMessage(`${actionLabel} dead-letter message complete`);
+      setMessage(`${actionLabel} ${deadLetterResourceLabel} complete`);
     } catch (error) {
       setMessage(
         error instanceof Error
           ? error.message
-          : `${actionLabel} dead-letter message failed`,
+          : `${actionLabel} ${deadLetterResourceLabel} failed`,
       );
     }
   }
@@ -533,6 +535,7 @@ export function App() {
         body: JSON.stringify({ role }),
       });
       await refreshUsers();
+      setMessage("Updated User Role");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Role update failed");
     }
