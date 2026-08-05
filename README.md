@@ -17,8 +17,15 @@ A microservices-based distributed HTTP job scheduling platform for creating one-
 
 Developers can create HTTP jobs, schedule future or recurring runs, inspect attempts and response metadata, manually retry failed executions, recover stalled work, inspect and requeue dead-letter messages, manage dashboard users, authenticate with JWTs or developer API keys, and run the full platform locally with Docker Compose.
 
+## Demo Video
+
+[![Distributed Job Scheduling Platform demo video](https://img.youtube.com/vi/Ob4obQvwj_g/maxresdefault.jpg)](https://youtu.be/Ob4obQvwj_g)
+
+▶ **Click the image above to play the demo video**
+
 ## Table of Contents
 
+- [Demo Video](#demo-video)
 - [Tech Stack](#tech-stack)
 - [Features](#features)
 - [How It Works](#how-it-works)
